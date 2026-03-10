@@ -64,7 +64,12 @@ app.add_middleware(
 
 # ── Pyth Hermes Fetcher ────────────────────────────────────────────────────────
 async def fetch_pyth():
-    ids_param = "&".join(f"ids[]={f['id']}" for f in FEEDS)
+    # Hermes expects price feed ids WITHOUT the 0x prefix.
+    # Our FEEDS are stored with 0x..., so normalize for requests + mapping.
+    def norm(feed_id: str) -> str:
+        return feed_id.lower().removeprefix("0x")
+
+    ids_param = "&".join(f"ids[]={norm(f['id'])}" for f in FEEDS)
     url = f"{HERMES_URL}/v2/updates/price/latest?{ids_param}&parsed=true"
 
     async with aiohttp.ClientSession() as session:
@@ -73,11 +78,11 @@ async def fetch_pyth():
                 raise Exception(f"Hermes returned {resp.status}")
             data = await resp.json()
 
-    feed_map = {f["id"]: f for f in FEEDS}
+    feed_map = {norm(f["id"]): f for f in FEEDS}
     now = time.time()
 
     for item in data.get("parsed", []):
-        feed_id = "0x" + item["id"]
+        feed_id = str(item.get("id", "")).lower()
         feed = feed_map.get(feed_id)
         if not feed:
             continue
