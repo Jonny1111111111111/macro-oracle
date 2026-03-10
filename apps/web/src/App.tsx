@@ -245,7 +245,7 @@ export default function App() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{ background: '#040810', minHeight: '100vh', color: '#d0e8ff', fontFamily: "'IBM Plex Mono', 'Courier New', monospace", fontSize: 13 }}>
+    <div className="app" style={{ background: '#040810', minHeight: '100vh', color: '#d0e8ff', fontFamily: "'IBM Plex Mono', 'Courier New', monospace", fontSize: 13 }}>
 
       {/* TOPBAR */}
       <header style={{
@@ -279,7 +279,7 @@ export default function App() {
 
       {/* REGIME BANNER */}
       {regime && (
-        <div style={{
+        <div className="regimeBanner" style={{
           display: 'grid', gridTemplateColumns: '320px 1fr 260px',
           borderBottom: '1px solid #0e2540',
           background: '#060d18',
@@ -391,7 +391,7 @@ export default function App() {
       </div>
 
       {/* ASSET GRID */}
-      <div style={{
+      <div className="assetGrid" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
         gap: 1, background: '#0e2540',
@@ -516,11 +516,28 @@ export default function App() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Bebas+Neue&family=Rajdhani:wght@400;500;600&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: #040810; }
+        body { background: #040810; overflow-x: hidden; }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #040810; }
         ::-webkit-scrollbar-thumb { background: #0e2540; border-radius: 3px; }
         @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.7)} }
+
+        /* Mobile responsiveness */
+        @media (max-width: 640px) {
+          .regimeBanner { grid-template-columns: 1fr !important; }
+          .assetGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+          .app { font-size: 12px !important; }
+
+          /* Reduce padding in key areas (topbar/banner) */
+          header { padding: 0 12px !important; }
+
+          /* Prevent any accidental overflows from wide text */
+          .regimeBanner, .assetGrid { max-width: 100vw; }
+        }
+
+        @media (max-width: 420px) {
+          .assetGrid { grid-template-columns: 1fr !important; }
+        }
       `}</style>
     </div>
   )
