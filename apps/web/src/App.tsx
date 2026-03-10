@@ -280,7 +280,7 @@ export default function App() {
       {/* REGIME BANNER */}
       {regime && (
         <div className="regimeBanner regime-grid" style={{
-          display: 'grid', gridTemplateColumns: (typeof window !== 'undefined' && window.innerWidth < 768) ? '1fr' : '320px 1fr 260px',
+          display: 'grid', gridTemplateColumns: '320px 1fr 260px',
           borderBottom: '1px solid #0e2540',
           background: '#060d18',
           position: 'relative', overflow: 'hidden',
@@ -516,7 +516,8 @@ export default function App() {
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Bebas+Neue&family=Rajdhani:wght@400;500;600&display=swap');
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { background: #040810; overflow-x: hidden; }
+        html, body { background: #040810; overflow-x: hidden; max-width: 100%; }
+        .app { overflow-x: hidden; max-width: 100%; }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #040810; }
         ::-webkit-scrollbar-thumb { background: #0e2540; border-radius: 3px; }
@@ -525,7 +526,11 @@ export default function App() {
         /* Mobile responsiveness */
         @media (max-width: 768px) {
           .regime-grid { grid-template-columns: 1fr !important; }
-          header { padding: 0 12px !important; }
+
+          /* Make the topbar wrap instead of overflowing */
+          header { padding: 0 12px !important; height: auto !important; flex-wrap: wrap !important; gap: 8px !important; }
+          header > div { flex-wrap: wrap !important; }
+
           .brand-name { font-size: 18px !important; }
         }
 
