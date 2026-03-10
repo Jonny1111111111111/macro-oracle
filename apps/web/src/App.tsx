@@ -257,7 +257,7 @@ export default function App() {
         boxShadow: '0 1px 20px rgba(0,180,255,0.07)',
       }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
-          <span style={{ fontFamily: "'Bebas Neue','Impact',sans-serif", fontSize: 24, letterSpacing: '0.1em', color: '#00d4ff', textShadow: '0 0 20px rgba(0,212,255,0.4)' }}>
+          <span className="brand-name" style={{ fontFamily: "'Bebas Neue','Impact',sans-serif", fontSize: 24, letterSpacing: '0.1em', color: '#00d4ff', textShadow: '0 0 20px rgba(0,212,255,0.4)' }}>
             MACRO ORACLE
           </span>
           <span style={{ fontSize: 9, color: '#3d6080', letterSpacing: '0.2em', textTransform: 'uppercase' }}>
@@ -279,8 +279,8 @@ export default function App() {
 
       {/* REGIME BANNER */}
       {regime && (
-        <div className="regimeBanner" style={{
-          display: 'grid', gridTemplateColumns: '320px 1fr 260px',
+        <div className="regimeBanner regime-grid" style={{
+          display: 'grid', gridTemplateColumns: (typeof window !== 'undefined' && window.innerWidth < 768) ? '1fr' : '320px 1fr 260px',
           borderBottom: '1px solid #0e2540',
           background: '#060d18',
           position: 'relative', overflow: 'hidden',
@@ -393,7 +393,7 @@ export default function App() {
       {/* ASSET GRID */}
       <div className="assetGrid" style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
         gap: 1, background: '#0e2540',
         padding: 0,
       }}>
@@ -523,6 +523,12 @@ export default function App() {
         @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.7)} }
 
         /* Mobile responsiveness */
+        @media (max-width: 768px) {
+          .regime-grid { grid-template-columns: 1fr !important; }
+          header { padding: 0 12px !important; }
+          .brand-name { font-size: 18px !important; }
+        }
+
         @media (max-width: 640px) {
           .regimeBanner { grid-template-columns: 1fr !important; }
           .assetGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
