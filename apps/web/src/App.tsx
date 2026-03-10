@@ -8,14 +8,11 @@ function BackgroundFX() {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    // NOTE: Reduced-motion check disabled temporarily for debugging (per request).
-    // const prefersReduced = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    // if (prefersReduced) return
+    const prefersReduced = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (prefersReduced) return
 
     const ctx = canvas.getContext('2d', { alpha: true })
     if (!ctx) return
-
-    console.log('[BackgroundFX] init', { w: window.innerWidth, h: window.innerHeight })
 
     // From here, treat as non-null for TS (we early-return above).
     const c = canvas
@@ -69,7 +66,6 @@ function BackgroundFX() {
       // Clear
       g.clearRect(0, 0, w, h)
       tick++
-      if (tick === 1) console.log('[BackgroundFX] animation started')
 
       // Update + draw links
       for (let i = 0; i < particles.length; i++) {
@@ -381,23 +377,23 @@ export default function App() {
       <BackgroundFX />
 
       {/* TOPBAR */}
-      <header className="glass" style={{
+      <header className="topbar glass" style={{
         position: 'sticky', top: 0, zIndex: 100,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '0 24px', height: 52,
+        padding: '10px 20px',
         background: 'rgba(6, 13, 24, 0.85)',
-        borderBottom: '1px solid rgba(14, 37, 64, 0.8)',
-        boxShadow: '0 1px 20px rgba(0,180,255,0.07)',
-        backdropFilter: 'blur(8px)',
+        borderBottom: '1px solid rgba(140, 140, 255, 0.10)',
+        boxShadow: '0 10px 40px rgba(0,0,0,0.35)',
+        backdropFilter: 'blur(10px)',
       }}>
-        <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
           <span className="brand-name" style={{ fontFamily: "'Bebas Neue','Impact',sans-serif", fontSize: 24, letterSpacing: '0.1em', color: '#00d4ff', textShadow: '0 0 20px rgba(0,212,255,0.4)' }}>
             MACRO ORACLE
           </span>
           <span style={{ fontSize: 9, color: '#3d6080', letterSpacing: '0.2em', textTransform: 'uppercase' }}>
             Cross-Asset Intelligence
           </span>
-          <span style={{ fontSize: 9, color: '#ffb300', border: '1px solid rgba(255,179,0,0.3)', padding: '2px 7px', borderRadius: 2, letterSpacing: '0.12em', background: 'rgba(255,179,0,0.05)' }}>
+          <span className="pill" style={{ fontSize: 9, color: '#ffb300', border: '1px solid rgba(255,179,0,0.28)', padding: '4px 10px', borderRadius: 999, letterSpacing: '0.14em', background: 'rgba(255,179,0,0.06)' }}>
             ⬡ PYTH NETWORK
           </span>
         </div>
@@ -556,7 +552,7 @@ export default function App() {
 
                   return (
                     <div key={feed.sym} style={{
-                      background: '#060d18',
+                      background: 'rgba(6, 13, 24, 0.72)',
                       padding: '12px 12px',
                       transition: 'background 0.15s',
                       borderBottom: `2px solid ${feed.color}22`,
@@ -619,7 +615,7 @@ export default function App() {
       </div>
 
       {/* REGIME HISTORY TIMELINE */}
-      <div style={{ padding: '20px 24px', borderTop: '1px solid #0e2540', background: '#060d18' }}>
+      <div className="glass" style={{ padding: '20px 24px', borderTop: '1px solid rgba(14, 37, 64, 0.8)', background: 'rgba(6, 13, 24, 0.70)', backdropFilter: 'blur(8px)' }}>
         <div style={{ fontSize: 9, color: '#3d6080', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 14 }}>
           Regime History Timeline
         </div>
