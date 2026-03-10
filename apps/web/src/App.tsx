@@ -483,7 +483,7 @@ export default function App() {
           ]).slice(0, 8).map((event, i) => {
             const rr = REGIMES[event.regime as RegimeKey] || REGIMES.UNCERTAIN
             return (
-              <div key={i} style={{ display: 'grid', gridTemplateColumns: '140px 160px 1fr', gap: 12, alignItems: 'center', padding: '10px 14px', background: '#040810', border: '1px solid #0a1826', borderRadius: 3, borderLeft: `3px solid ${rr.color}` }}>
+              <div key={i} className="timelineRow" style={{ display: 'grid', gridTemplateColumns: '140px 160px 1fr', gap: 12, alignItems: 'center', padding: '10px 14px', background: '#040810', border: '1px solid #0a1826', borderRadius: 3, borderLeft: `3px solid ${rr.color}` }}>
                 <div>
                   <div style={{ fontSize: 10, color: '#3d6080' }}>{timeAgo(event.ts)}</div>
                   <div style={{ fontSize: 9, color: '#1e3a52', marginTop: 2 }}>
@@ -537,6 +537,8 @@ export default function App() {
         @media (max-width: 640px) {
           .regimeBanner { grid-template-columns: 1fr !important; }
           .assetGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+          .timelineRow { grid-template-columns: 1fr !important; gap: 8px !important; align-items: start !important; }
+          .timelineRow > div { min-width: 0 !important; }
           .app { font-size: 12px !important; }
 
           /* Reduce padding in key areas (topbar/banner) */
