@@ -1,5 +1,131 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 
+// ── Background FX (particles + gradient mesh + orbs) ─────────────────────────
+function BackgroundFX() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null)
+
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const prefersReduced = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (prefersReduced) return
+
+    const ctx = canvas.getContext('2d', { alpha: true })
+    if (!ctx) return
+
+    // From here, treat as non-null for TS (we early-return above).
+    const c = canvas
+    const g = ctx
+
+    let raf = 0
+    let w = 0
+    let h = 0
+    let dpr = Math.min(window.devicePixelRatio || 1, 2)
+
+    type P = { x: number; y: number; vx: number; vy: number }
+    const particles: P[] = []
+
+    const config = {
+      count: 55,
+      speed: 0.18,
+      linkDist: 110,
+      dotSize: 1.4,
+    }
+
+    function resize() {
+      const { innerWidth, innerHeight } = window
+      w = innerWidth
+      h = innerHeight
+      dpr = Math.min(window.devicePixelRatio || 1, 2)
+      c.width = Math.floor(w * dpr)
+      c.height = Math.floor(h * dpr)
+      c.style.width = w + 'px'
+      c.style.height = h + 'px'
+      g.setTransform(dpr, 0, 0, dpr, 0, 0)
+    }
+
+    function rand(min: number, max: number) {
+      return min + Math.random() * (max - min)
+    }
+
+    function init() {
+      particles.length = 0
+      for (let i = 0; i < config.count; i++) {
+        particles.push({
+          x: rand(0, w),
+          y: rand(0, h),
+          vx: rand(-1, 1) * config.speed,
+          vy: rand(-1, 1) * config.speed,
+        })
+      }
+    }
+
+    function step() {
+      // Clear
+      g.clearRect(0, 0, w, h)
+
+      // Update + draw links
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i]
+        p.x += p.vx
+        p.y += p.vy
+
+        // Wrap edges for smoothness
+        if (p.x < -10) p.x = w + 10
+        if (p.x > w + 10) p.x = -10
+        if (p.y < -10) p.y = h + 10
+        if (p.y > h + 10) p.y = -10
+
+        for (let j = i + 1; j < particles.length; j++) {
+          const q = particles[j]
+          const dx = p.x - q.x
+          const dy = p.y - q.y
+          const d = Math.sqrt(dx * dx + dy * dy)
+          if (d < config.linkDist) {
+            const a = 1 - d / config.linkDist
+            g.strokeStyle = `rgba(0, 212, 255, ${0.10 * a})`
+            g.lineWidth = 1
+            g.beginPath()
+            g.moveTo(p.x, p.y)
+            g.lineTo(q.x, q.y)
+            g.stroke()
+          }
+        }
+      }
+
+      // Draw dots last
+      g.fillStyle = 'rgba(0, 212, 255, 0.35)'
+      for (const p of particles) {
+        g.beginPath()
+        g.arc(p.x, p.y, config.dotSize, 0, Math.PI * 2)
+        g.fill()
+      }
+
+      raf = requestAnimationFrame(step)
+    }
+
+    resize()
+    init()
+    raf = requestAnimationFrame(step)
+
+    window.addEventListener('resize', resize)
+    return () => {
+      window.removeEventListener('resize', resize)
+      cancelAnimationFrame(raf)
+    }
+  }, [])
+
+  return (
+    <div className="bgFx" aria-hidden="true">
+      <div className="bgMesh" />
+      <div className="bgOrbs" />
+      <canvas ref={canvasRef} className="bgCanvas" />
+      <div className="bgVignette" />
+    </div>
+  )
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 type RegimeKey = 'RISK_OFF' | 'RISK_ON' | 'DXY_SURGE' | 'CRYPTO_DEC' | 'COMM_CYCLE' | 'UNCERTAIN'
 type AssetClass = 'crypto' | 'metals' | 'forex' | 'equities'
@@ -246,6 +372,7 @@ export default function App() {
   // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="app" style={{ background: '#040810', minHeight: '100vh', color: '#d0e8ff', fontFamily: "'IBM Plex Mono', 'Courier New', monospace", fontSize: 13 }}>
+      <BackgroundFX />
 
       {/* TOPBAR */}
       <header style={{
@@ -522,6 +649,55 @@ export default function App() {
         ::-webkit-scrollbar-track { background: #040810; }
         ::-webkit-scrollbar-thumb { background: #0e2540; border-radius: 3px; }
         @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.7)} }
+
+        /* Background FX layers */
+        .bgFx { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+        .bgMesh {
+          position: absolute; inset: -20%;
+          background:
+            radial-gradient(600px 600px at 20% 25%, rgba(0, 212, 255, 0.12), transparent 60%),
+            radial-gradient(700px 700px at 80% 30%, rgba(0, 140, 255, 0.10), transparent 62%),
+            radial-gradient(800px 800px at 60% 80%, rgba(0, 230, 118, 0.06), transparent 60%),
+            linear-gradient(120deg, rgba(0, 40, 80, 0.55), rgba(0, 10, 25, 0.85));
+          filter: blur(0px) saturate(1.05);
+          animation: meshShift 18s ease-in-out infinite alternate;
+          will-change: transform;
+        }
+        @keyframes meshShift {
+          0% { transform: translate3d(-2%, -1%, 0) scale(1.02); }
+          100% { transform: translate3d(2%, 1%, 0) scale(1.06); }
+        }
+
+        .bgOrbs {
+          position: absolute; inset: 0;
+          background:
+            radial-gradient(220px 220px at 15% 65%, rgba(0, 212, 255, 0.12), transparent 60%),
+            radial-gradient(260px 260px at 85% 60%, rgba(0, 160, 255, 0.10), transparent 62%),
+            radial-gradient(320px 320px at 55% 15%, rgba(0, 140, 255, 0.08), transparent 65%);
+          filter: blur(2px);
+          animation: orbFloat 14s ease-in-out infinite;
+          will-change: transform, opacity;
+          opacity: 0.9;
+        }
+        @keyframes orbFloat {
+          0%, 100% { transform: translate3d(0,0,0); opacity: 0.75; }
+          50% { transform: translate3d(0, -10px, 0); opacity: 0.95; }
+        }
+
+        .bgCanvas { position: absolute; inset: 0; opacity: 0.9; }
+        .bgVignette {
+          position: absolute; inset: 0;
+          background: radial-gradient(ellipse at center, transparent 0%, rgba(4,8,16,0.55) 70%, rgba(4,8,16,0.9) 100%);
+        }
+
+        /* Ensure app content sits above background */
+        .app > *:not(.bgFx) { position: relative; z-index: 1; }
+
+        /* Reduce animation for low-motion users */
+        @media (prefers-reduced-motion: reduce) {
+          .bgMesh, .bgOrbs { animation: none !important; }
+          .bgCanvas { display: none !important; }
+        }
 
         /* Mobile responsiveness */
         @media (max-width: 768px) {
