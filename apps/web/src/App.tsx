@@ -380,11 +380,11 @@ export default function App() {
       <header className="topbar glass" style={{
         position: 'sticky', top: 0, zIndex: 100,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '10px 20px',
-        background: 'rgba(6, 13, 24, 0.85)',
-        borderBottom: '1px solid rgba(140, 140, 255, 0.10)',
-        boxShadow: '0 10px 40px rgba(0,0,0,0.35)',
-        backdropFilter: 'blur(10px)',
+        padding: '12px 18px',
+        background: 'rgba(6, 13, 24, 0.68)',
+        borderBottom: '1px solid rgba(0, 212, 255, 0.10)',
+        boxShadow: '0 10px 60px rgba(0,0,0,0.40)',
+        backdropFilter: 'blur(12px)',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
           <span className="brand-name" style={{ fontFamily: "'Bebas Neue','Impact',sans-serif", fontSize: 24, letterSpacing: '0.1em', color: '#00d4ff', textShadow: '0 0 20px rgba(0,212,255,0.4)' }}>
@@ -407,14 +407,88 @@ export default function App() {
         </div>
       </header>
 
-      {/* REGIME BANNER */}
+      {/* HERO */}
+      <section className="heroWrap" style={{ padding: '26px 24px 10px' }}>
+        <div className="hero glass" style={{
+          position: 'relative',
+          padding: '26px 22px',
+          borderRadius: 14,
+          border: '1px solid rgba(0, 212, 255, 0.12)',
+          background: 'rgba(6, 13, 24, 0.60)',
+          boxShadow: '0 24px 120px rgba(0,0,0,0.55)',
+          overflow: 'hidden'
+        }}>
+          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'radial-gradient(800px 600px at 25% 10%, rgba(0,212,255,0.14), transparent 60%), radial-gradient(700px 500px at 80% 20%, rgba(120,90,255,0.10), transparent 60%)' }} />
+
+          <div style={{ position: 'relative' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 10, color: '#3d6080', letterSpacing: '0.22em', textTransform: 'uppercase' }}>Cross‑Asset Intelligence</div>
+                <h1 style={{ fontFamily: "'Bebas Neue','Impact',sans-serif", fontSize: 56, letterSpacing: '0.06em', lineHeight: 1, marginTop: 10, color: '#d0e8ff' }}>
+                  MACRO ORACLE
+                </h1>
+                <p style={{ marginTop: 10, maxWidth: 760, fontFamily: "'Rajdhani','Arial',sans-serif", fontSize: 18, lineHeight: 1.65, color: '#a9c9e4' }}>
+                  Live regime detection across crypto, metals, FX and equities — powered by real‑time Pyth Hermes feeds.
+                </p>
+              </div>
+
+              <div className="heroPills" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span className="pill" style={{ fontSize: 10, color: apiStatus === 'live' ? '#00e676' : '#ffb300', border: `1px solid ${apiStatus === 'live' ? 'rgba(0,230,118,0.28)' : 'rgba(255,179,0,0.25)'}`, padding: '6px 12px', borderRadius: 999, letterSpacing: '0.14em', background: 'rgba(4, 8, 16, 0.30)' }}>
+                  {apiStatus === 'live' ? 'LIVE · PYTH HERMES' : apiStatus === 'demo' ? 'DEMO MODE' : 'CONNECTING…'}
+                </span>
+                <span className="pill" style={{ fontSize: 10, color: '#00d4ff', border: '1px solid rgba(0,212,255,0.22)', padding: '6px 12px', borderRadius: 999, letterSpacing: '0.14em', background: 'rgba(4, 8, 16, 0.30)' }}>
+                  {Object.keys(prices).length} feeds
+                </span>
+                <span className="pill" style={{ fontSize: 10, color: '#3d6080', border: '1px solid rgba(61,96,128,0.25)', padding: '6px 12px', borderRadius: 999, letterSpacing: '0.14em', background: 'rgba(4, 8, 16, 0.25)' }}>
+                  {clock}
+                </span>
+              </div>
+            </div>
+
+            {/* METRICS */}
+            <div className="metricGrid" style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+              gap: 12,
+              marginTop: 18,
+            }}>
+              {(
+                [
+                  { k: 'Regime', v: regime ? REGIMES[regime.regime].label : '—', c: regime ? REGIMES[regime.regime].color : '#78909c' },
+                  { k: 'Confidence', v: regime ? `${regime.confidence}%` : '—', c: '#00d4ff' },
+                  { k: 'Refresh', v: '8–10s', c: '#ffb300' },
+                  { k: 'Mode', v: apiStatus === 'live' ? 'Live' : apiStatus === 'demo' ? 'Demo' : 'Connecting', c: apiStatus === 'live' ? '#00e676' : '#ffb300' },
+                ]
+              ).map(item => (
+                <div key={item.k} className="metricCard glass" style={{
+                  borderRadius: 12,
+                  padding: '14px 14px',
+                  background: 'rgba(6, 13, 24, 0.55)',
+                  border: '1px solid rgba(0,212,255,0.10)',
+                  boxShadow: '0 12px 40px rgba(0,0,0,0.35)'
+                }}>
+                  <div style={{ fontSize: 10, color: '#3d6080', letterSpacing: '0.2em', textTransform: 'uppercase' }}>{item.k}</div>
+                  <div style={{ marginTop: 8, fontFamily: "'Bebas Neue','Impact',sans-serif", fontSize: 28, letterSpacing: '0.06em', color: item.c, lineHeight: 1 }}>
+                    {item.v}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* REGIME (glass panel) */}
       {regime && (
         <div className="regimeBanner regime-grid glass" style={{
           display: 'grid', gridTemplateColumns: '320px 1fr 260px',
-          borderBottom: '1px solid rgba(14, 37, 64, 0.8)',
-          background: 'rgba(6, 13, 24, 0.80)',
+          borderBottom: '1px solid rgba(14, 37, 64, 0.65)',
+          background: 'rgba(6, 13, 24, 0.70)',
           position: 'relative', overflow: 'hidden',
-          backdropFilter: 'blur(8px)',
+          backdropFilter: 'blur(10px)',
+          borderRadius: 14,
+          margin: '14px 24px 0',
+          border: '1px solid rgba(0, 212, 255, 0.10)'
         }}>
           {/* Glow */}
           <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(ellipse 50% 100% at 15% 50%, ${r.bg} 0%, transparent 70%)`, pointerEvents: 'none' }} />
@@ -507,8 +581,8 @@ export default function App() {
       <div className="categoryGrid" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-        gap: 12,
-        padding: '16px 24px',
+        gap: 14,
+        padding: '18px 24px 10px',
       }}>
         {([
           { key: 'crypto' as const, title: 'Crypto', color: CLASS_META.crypto.color },
@@ -520,16 +594,17 @@ export default function App() {
           return (
             <section key={cat.key} className="categoryBox glass" style={{
               border: `1px solid ${cat.color}33`,
-              background: 'rgba(6, 13, 24, 0.75)',
-              backdropFilter: 'blur(8px)',
-              borderRadius: 6,
+              background: 'rgba(6, 13, 24, 0.62)',
+              borderRadius: 14,
               overflow: 'hidden',
+              boxShadow: '0 18px 70px rgba(0,0,0,0.45)',
+              backdropFilter: 'blur(12px)',
             }}>
               <div style={{
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '10px 12px',
-                borderBottom: '1px solid #0e2540',
-                background: 'rgba(4, 8, 16, 0.55)'
+                padding: '12px 14px',
+                borderBottom: '1px solid rgba(14, 37, 64, 0.65)',
+                background: 'rgba(4, 8, 16, 0.35)'
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <div style={{ width: 10, height: 10, borderRadius: 2, background: cat.color, boxShadow: `0 0 10px ${cat.color}55` }} />
@@ -615,7 +690,7 @@ export default function App() {
       </div>
 
       {/* REGIME HISTORY TIMELINE */}
-      <div className="glass" style={{ padding: '20px 24px', borderTop: '1px solid rgba(14, 37, 64, 0.8)', background: 'rgba(6, 13, 24, 0.70)', backdropFilter: 'blur(8px)' }}>
+      <div className="glass" style={{ padding: '22px 24px 26px', borderTop: '1px solid rgba(14, 37, 64, 0.55)', background: 'rgba(6, 13, 24, 0.60)', backdropFilter: 'blur(12px)' }}>
         <div style={{ fontSize: 9, color: '#3d6080', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 14 }}>
           Regime History Timeline
         </div>
@@ -723,13 +798,22 @@ export default function App() {
         }
 
         /* Mobile responsiveness */
+        /* Premium layout tweaks */
+        .topbar .pill { background: rgba(4,8,16,0.25); }
+
+        @media (max-width: 1024px) {
+          .metricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+        }
+
         @media (max-width: 768px) {
           .regime-grid { grid-template-columns: 1fr !important; }
+          .metricGrid { grid-template-columns: 1fr !important; }
 
           /* Make the topbar wrap instead of overflowing */
-          header { padding: 0 12px !important; height: auto !important; flex-wrap: wrap !important; gap: 8px !important; }
+          header { padding: 12px 12px !important; height: auto !important; flex-wrap: wrap !important; gap: 10px !important; }
           header > div { flex-wrap: wrap !important; }
 
+          .heroWrap { padding: 18px 12px 6px !important; }
           .brand-name { font-size: 18px !important; }
         }
 
