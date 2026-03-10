@@ -377,17 +377,18 @@ export default function App() {
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="app" style={{ background: '#040810', minHeight: '100vh', color: '#d0e8ff', fontFamily: "'IBM Plex Mono', 'Courier New', monospace", fontSize: 13 }}>
+    <div className="app" style={{ background: 'transparent', minHeight: '100vh', color: '#d0e8ff', fontFamily: "'IBM Plex Mono', 'Courier New', monospace", fontSize: 13 }}>
       <BackgroundFX />
 
       {/* TOPBAR */}
-      <header style={{
+      <header className="glass" style={{
         position: 'sticky', top: 0, zIndex: 100,
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '0 24px', height: 52,
-        background: '#060d18',
-        borderBottom: '1px solid #0e2540',
+        background: 'rgba(6, 13, 24, 0.85)',
+        borderBottom: '1px solid rgba(14, 37, 64, 0.8)',
         boxShadow: '0 1px 20px rgba(0,180,255,0.07)',
+        backdropFilter: 'blur(8px)',
       }}>
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
           <span className="brand-name" style={{ fontFamily: "'Bebas Neue','Impact',sans-serif", fontSize: 24, letterSpacing: '0.1em', color: '#00d4ff', textShadow: '0 0 20px rgba(0,212,255,0.4)' }}>
@@ -412,11 +413,12 @@ export default function App() {
 
       {/* REGIME BANNER */}
       {regime && (
-        <div className="regimeBanner regime-grid" style={{
+        <div className="regimeBanner regime-grid glass" style={{
           display: 'grid', gridTemplateColumns: '320px 1fr 260px',
-          borderBottom: '1px solid #0e2540',
-          background: '#060d18',
+          borderBottom: '1px solid rgba(14, 37, 64, 0.8)',
+          background: 'rgba(6, 13, 24, 0.80)',
           position: 'relative', overflow: 'hidden',
+          backdropFilter: 'blur(8px)',
         }}>
           {/* Glow */}
           <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(ellipse 50% 100% at 15% 50%, ${r.bg} 0%, transparent 70%)`, pointerEvents: 'none' }} />
@@ -520,9 +522,10 @@ export default function App() {
         ]).map(cat => {
           const catFeeds = FEEDS.filter(f => f.class === cat.key)
           return (
-            <section key={cat.key} className="categoryBox" style={{
+            <section key={cat.key} className="categoryBox glass" style={{
               border: `1px solid ${cat.color}33`,
-              background: 'rgba(6, 13, 24, 0.85)',
+              background: 'rgba(6, 13, 24, 0.75)',
+              backdropFilter: 'blur(8px)',
               borderRadius: 6,
               overflow: 'hidden',
             }}>
@@ -663,6 +666,12 @@ export default function App() {
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { background: #040810; overflow-x: hidden; max-width: 100%; }
         .app { overflow-x: hidden; max-width: 100%; }
+
+        /* Glassmorphism helpers */
+        .glass {
+          -webkit-backdrop-filter: blur(8px);
+          backdrop-filter: blur(8px);
+        }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #040810; }
         ::-webkit-scrollbar-thumb { background: #0e2540; border-radius: 3px; }
