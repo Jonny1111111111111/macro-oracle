@@ -8,11 +8,14 @@ function BackgroundFX() {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    const prefersReduced = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    if (prefersReduced) return
+    // NOTE: Reduced-motion check disabled temporarily for debugging (per request).
+    // const prefersReduced = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    // if (prefersReduced) return
 
     const ctx = canvas.getContext('2d', { alpha: true })
     if (!ctx) return
+
+    console.log('[BackgroundFX] init', { w: window.innerWidth, h: window.innerHeight })
 
     // From here, treat as non-null for TS (we early-return above).
     const c = canvas
@@ -61,9 +64,12 @@ function BackgroundFX() {
       }
     }
 
+    let tick = 0
     function step() {
       // Clear
       g.clearRect(0, 0, w, h)
+      tick++
+      if (tick === 1) console.log('[BackgroundFX] animation started')
 
       // Update + draw links
       for (let i = 0; i < particles.length; i++) {
@@ -264,7 +270,7 @@ export default function App() {
   const [regime, setRegime]           = useState<RegimeResult | null>(null)
   const [history, setHistory]         = useState<Record<string, HistoryPoint[]>>({})
   const [regimeHistory, setRegimeHistory] = useState<RegimeEvent[]>([])
-  const [activeClass, setActiveClass] = useState<AssetClass | 'all'>('all')
+  // const [activeClass, setActiveClass] = useState<AssetClass | 'all'>('all')
   const [apiStatus, setApiStatus]     = useState<'connecting' | 'live' | 'demo'>('connecting')
   const [clock, setClock]             = useState('')
   const [publishStatus, setPublishStatus] = useState<'idle' | 'loading' | 'done'>('idle')
@@ -366,7 +372,7 @@ export default function App() {
     }
   }
 
-  const filteredFeeds = FEEDS.filter(f => activeClass === 'all' || f.class === activeClass)
+  // Category layout renders all classes; keep FEEDS intact.
   const r = regime ? REGIMES[regime.regime] : REGIMES.UNCERTAIN
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -499,100 +505,112 @@ export default function App() {
         </div>
       )}
 
-      {/* ASSET CLASS TABS */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 0, padding: '0 24px', background: '#060d18', borderBottom: '1px solid #0e2540' }}>
-        {(['all', 'crypto', 'metals', 'forex', 'equities'] as const).map(cls => (
-          <button key={cls} onClick={() => setActiveClass(cls)} style={{
-            padding: '12px 20px', fontSize: 10, fontFamily: 'inherit',
-            background: activeClass === cls ? '#0a1a2e' : 'transparent',
-            border: 'none', borderBottom: `2px solid ${activeClass === cls ? '#00d4ff' : 'transparent'}`,
-            color: activeClass === cls ? '#00d4ff' : '#3d6080',
-            cursor: 'pointer', letterSpacing: '0.12em', textTransform: 'uppercase', transition: 'all 0.15s',
-          }}>
-            {cls === 'all' ? 'All Assets' : CLASS_META[cls]?.label || cls}
-          </button>
-        ))}
-        <div style={{ marginLeft: 'auto', fontSize: 10, color: '#3d6080', paddingRight: 8 }}>
-          {Object.keys(prices).length} feeds · refreshing every 8s
-        </div>
-      </div>
-
-      {/* ASSET GRID */}
-      <div className="assetGrid" style={{
+      {/* ASSET CATEGORIES (separate boxes) */}
+      <div className="categoryGrid" style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))',
-        gap: 1, background: '#0e2540',
-        padding: 0,
+        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+        gap: 12,
+        padding: '16px 24px',
       }}>
-        {filteredFeeds.map(feed => {
-          const d = prices[feed.sym]
-          const h = history[feed.sym] || []
-          const sparkPath = buildSparkPath(h, 100, 32)
-          const chg = d?.change_1h ?? 0
-          const up  = chg >= 0
-          const isFlashing = d && d.prev && d.price !== d.prev
-
+        {([
+          { key: 'crypto' as const, title: 'Crypto', color: CLASS_META.crypto.color },
+          { key: 'metals' as const, title: 'Metals & Energy', color: CLASS_META.metals.color },
+          { key: 'forex' as const, title: 'Forex', color: CLASS_META.forex.color },
+          { key: 'equities' as const, title: 'Equities', color: CLASS_META.equities.color },
+        ]).map(cat => {
+          const catFeeds = FEEDS.filter(f => f.class === cat.key)
           return (
-            <div key={feed.sym} style={{
-              background: '#060d18',
-              padding: '14px 16px',
-              cursor: 'pointer',
-              transition: 'background 0.15s',
-              borderBottom: `2px solid ${feed.color}22`,
-              position: 'relative', overflow: 'hidden',
-            }}
-            onMouseEnter={e => (e.currentTarget.style.background = '#0a1520')}
-            onMouseLeave={e => (e.currentTarget.style.background = '#060d18')}
-            >
-              {/* Left accent */}
-              <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 2, background: feed.color, opacity: 0.6 }} />
-
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-                <div>
-                  <div style={{ fontSize: 13, fontWeight: 700, color: feed.color, letterSpacing: '0.04em' }}>{feed.sym}</div>
-                  <div style={{ fontSize: 9, color: '#3d6080', marginTop: 1 }}>{feed.name}</div>
-                </div>
-                <div style={{
-                  fontSize: 9, padding: '2px 6px', borderRadius: 2,
-                  background: up ? 'rgba(0,230,118,0.1)' : 'rgba(255,68,68,0.1)',
-                  color: up ? '#00e676' : '#ff4444',
-                  border: `1px solid ${up ? 'rgba(0,230,118,0.25)' : 'rgba(255,68,68,0.25)'}`,
-                  fontWeight: 700,
-                }}>
-                  {up ? '+' : ''}{chg.toFixed(2)}%
+            <section key={cat.key} className="categoryBox" style={{
+              border: `1px solid ${cat.color}33`,
+              background: 'rgba(6, 13, 24, 0.85)',
+              borderRadius: 6,
+              overflow: 'hidden',
+            }}>
+              <div style={{
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                padding: '10px 12px',
+                borderBottom: '1px solid #0e2540',
+                background: 'rgba(4, 8, 16, 0.55)'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ width: 10, height: 10, borderRadius: 2, background: cat.color, boxShadow: `0 0 10px ${cat.color}55` }} />
+                  <span style={{ fontSize: 10, color: '#3d6080', letterSpacing: '0.2em', textTransform: 'uppercase' }}>{cat.title}</span>
                 </div>
               </div>
 
-              <div style={{ fontSize: 20, fontWeight: 500, color: '#d0e8ff', letterSpacing: '0.05em', marginBottom: 6, fontFamily: "'Bebas Neue','Impact',sans-serif" }}>
-                {fmtPrice(feed, d?.price)}
+              <div className="categoryAssets" style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
+                gap: 1,
+                background: '#0e2540',
+              }}>
+                {catFeeds.map(feed => {
+                  const d = prices[feed.sym]
+                  const h = history[feed.sym] || []
+                  const sparkPath = buildSparkPath(h, 100, 32)
+                  const chg = d?.change_1h ?? 0
+                  const up  = chg >= 0
+
+                  return (
+                    <div key={feed.sym} style={{
+                      background: '#060d18',
+                      padding: '12px 12px',
+                      transition: 'background 0.15s',
+                      borderBottom: `2px solid ${feed.color}22`,
+                      position: 'relative', overflow: 'hidden',
+                      minWidth: 0,
+                    }}>
+                      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 2, background: feed.color, opacity: 0.6 }} />
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6, gap: 10 }}>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 700, color: feed.color, letterSpacing: '0.04em' }}>{feed.sym}</div>
+                          <div style={{ fontSize: 9, color: '#3d6080', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{feed.name}</div>
+                        </div>
+                        <div style={{
+                          fontSize: 9, padding: '2px 6px', borderRadius: 2,
+                          background: up ? 'rgba(0,230,118,0.1)' : 'rgba(255,68,68,0.1)',
+                          color: up ? '#00e676' : '#ff4444',
+                          border: `1px solid ${up ? 'rgba(0,230,118,0.25)' : 'rgba(255,68,68,0.25)'}`,
+                          fontWeight: 700,
+                          flex: '0 0 auto'
+                        }}>
+                          {up ? '+' : ''}{chg.toFixed(2)}%
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: 18, fontWeight: 500, color: '#d0e8ff', letterSpacing: '0.05em', marginBottom: 6, fontFamily: "'Bebas Neue','Impact',sans-serif" }}>
+                        {fmtPrice(feed, d?.price)}
+                      </div>
+
+                      <svg width="100%" height="28" viewBox="0 0 100 32" preserveAspectRatio="none" style={{ display: 'block', marginBottom: 4 }}>
+                        {sparkPath && (
+                          <>
+                            <defs>
+                              <linearGradient id={`g-${feed.sym}`} x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor={feed.color} stopOpacity="0.3" />
+                                <stop offset="100%" stopColor={feed.color} stopOpacity="0" />
+                              </linearGradient>
+                            </defs>
+                            <path d={sparkPath + ' L100,32 L0,32 Z'} fill={`url(#g-${feed.sym})`} />
+                            <path d={sparkPath} fill="none" stroke={feed.color} strokeWidth="1.2" opacity="0.9" />
+                          </>
+                        )}
+                      </svg>
+
+                      {d?.conf_pct !== undefined && (
+                        <div style={{ fontSize: 9, color: '#2a4a64', display: 'flex', justifyContent: 'space-between' }}>
+                          <span>±{d.conf_pct.toFixed(3)}%</span>
+                          <span style={{ color: d.conf_pct < 0.05 ? '#00e676' : d.conf_pct < 0.2 ? '#ffb300' : '#ff4444' }}>
+                            {d.conf_pct < 0.05 ? 'HQ' : d.conf_pct < 0.2 ? 'MED' : 'LOW'}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
-
-              {/* Sparkline */}
-              <svg width="100%" height="32" viewBox="0 0 100 32" preserveAspectRatio="none" style={{ display: 'block', marginBottom: 4 }}>
-                {sparkPath && (
-                  <>
-                    <defs>
-                      <linearGradient id={`g-${feed.sym}`} x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor={feed.color} stopOpacity="0.3" />
-                        <stop offset="100%" stopColor={feed.color} stopOpacity="0" />
-                      </linearGradient>
-                    </defs>
-                    <path d={sparkPath + ' L100,32 L0,32 Z'} fill={`url(#g-${feed.sym})`} />
-                    <path d={sparkPath} fill="none" stroke={feed.color} strokeWidth="1.2" opacity="0.9" />
-                  </>
-                )}
-              </svg>
-
-              {/* Confidence interval */}
-              {d?.conf_pct !== undefined && (
-                <div style={{ fontSize: 9, color: '#2a4a64', display: 'flex', justifyContent: 'space-between' }}>
-                  <span>±{d.conf_pct.toFixed(3)}% conf</span>
-                  <span style={{ color: d.conf_pct < 0.05 ? '#00e676' : d.conf_pct < 0.2 ? '#ffb300' : '#ff4444' }}>
-                    {d.conf_pct < 0.05 ? 'HQ' : d.conf_pct < 0.2 ? 'MED' : 'LOW'}
-                  </span>
-                </div>
-              )}
-            </div>
+            </section>
           )
         })}
       </div>
@@ -655,11 +673,11 @@ export default function App() {
         .bgMesh {
           position: absolute; inset: -20%;
           background:
-            radial-gradient(600px 600px at 20% 25%, rgba(0, 212, 255, 0.12), transparent 60%),
-            radial-gradient(700px 700px at 80% 30%, rgba(0, 140, 255, 0.10), transparent 62%),
-            radial-gradient(800px 800px at 60% 80%, rgba(0, 230, 118, 0.06), transparent 60%),
-            linear-gradient(120deg, rgba(0, 40, 80, 0.55), rgba(0, 10, 25, 0.85));
-          filter: blur(0px) saturate(1.05);
+            radial-gradient(600px 600px at 20% 25%, rgba(0, 212, 255, 0.18), transparent 60%),
+            radial-gradient(700px 700px at 80% 30%, rgba(0, 140, 255, 0.16), transparent 62%),
+            radial-gradient(800px 800px at 60% 80%, rgba(0, 230, 118, 0.10), transparent 60%),
+            linear-gradient(120deg, rgba(0, 40, 80, 0.65), rgba(0, 10, 25, 0.92));
+          filter: blur(0px) saturate(1.08);
           animation: meshShift 18s ease-in-out infinite alternate;
           will-change: transform;
         }
@@ -684,7 +702,7 @@ export default function App() {
           50% { transform: translate3d(0, -10px, 0); opacity: 0.95; }
         }
 
-        .bgCanvas { position: absolute; inset: 0; opacity: 0.9; }
+        .bgCanvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; opacity: 0.95; }
         .bgVignette {
           position: absolute; inset: 0;
           background: radial-gradient(ellipse at center, transparent 0%, rgba(4,8,16,0.55) 70%, rgba(4,8,16,0.9) 100%);
@@ -713,6 +731,8 @@ export default function App() {
         @media (max-width: 640px) {
           .regimeBanner { grid-template-columns: 1fr !important; }
           .assetGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+          .categoryGrid { grid-template-columns: 1fr !important; padding: 12px !important; }
+          .categoryAssets { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
           .timelineRow { grid-template-columns: 1fr !important; gap: 8px !important; align-items: start !important; }
           .timelineRow > div { min-width: 0 !important; }
           .app { font-size: 12px !important; }
