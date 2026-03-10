@@ -1,304 +1,318 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 
-// ── Background FX (particles + gradient mesh + orbs) ─────────────────────────
-function BackgroundFX() {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
-
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-
-    const prefersReduced = typeof window !== 'undefined' && window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    if (prefersReduced) return
-
-    const ctx = canvas.getContext('2d', { alpha: true })
-    if (!ctx) return
-
-    // From here, treat as non-null for TS (we early-return above).
-    const c = canvas
-    const g = ctx
-
-    let raf = 0
-    let w = 0
-    let h = 0
-    let dpr = Math.min(window.devicePixelRatio || 1, 2)
-
-    type P = { x: number; y: number; vx: number; vy: number }
-    const particles: P[] = []
-
-    const config = {
-      count: 55,
-      speed: 0.18,
-      linkDist: 110,
-      dotSize: 1.4,
-    }
-
-    function resize() {
-      const { innerWidth, innerHeight } = window
-      w = innerWidth
-      h = innerHeight
-      dpr = Math.min(window.devicePixelRatio || 1, 2)
-      c.width = Math.floor(w * dpr)
-      c.height = Math.floor(h * dpr)
-      c.style.width = w + 'px'
-      c.style.height = h + 'px'
-      g.setTransform(dpr, 0, 0, dpr, 0, 0)
-    }
-
-    function rand(min: number, max: number) {
-      return min + Math.random() * (max - min)
-    }
-
-    function init() {
-      particles.length = 0
-      for (let i = 0; i < config.count; i++) {
-        particles.push({
-          x: rand(0, w),
-          y: rand(0, h),
-          vx: rand(-1, 1) * config.speed,
-          vy: rand(-1, 1) * config.speed,
-        })
-      }
-    }
-
-    let tick = 0
-    function step() {
-      // Clear
-      g.clearRect(0, 0, w, h)
-      tick++
-
-      // Update + draw links
-      for (let i = 0; i < particles.length; i++) {
-        const p = particles[i]
-        p.x += p.vx
-        p.y += p.vy
-
-        // Wrap edges for smoothness
-        if (p.x < -10) p.x = w + 10
-        if (p.x > w + 10) p.x = -10
-        if (p.y < -10) p.y = h + 10
-        if (p.y > h + 10) p.y = -10
-
-        for (let j = i + 1; j < particles.length; j++) {
-          const q = particles[j]
-          const dx = p.x - q.x
-          const dy = p.y - q.y
-          const d = Math.sqrt(dx * dx + dy * dy)
-          if (d < config.linkDist) {
-            const a = 1 - d / config.linkDist
-            g.strokeStyle = `rgba(0, 212, 255, ${0.10 * a})`
-            g.lineWidth = 1
-            g.beginPath()
-            g.moveTo(p.x, p.y)
-            g.lineTo(q.x, q.y)
-            g.stroke()
-          }
-        }
-      }
-
-      // Draw dots last
-      g.fillStyle = 'rgba(0, 212, 255, 0.35)'
-      for (const p of particles) {
-        g.beginPath()
-        g.arc(p.x, p.y, config.dotSize, 0, Math.PI * 2)
-        g.fill()
-      }
-
-      raf = requestAnimationFrame(step)
-    }
-
-    resize()
-    init()
-    raf = requestAnimationFrame(step)
-
-    window.addEventListener('resize', resize)
-    return () => {
-      window.removeEventListener('resize', resize)
-      cancelAnimationFrame(raf)
-    }
-  }, [])
-
-  return (
-    <div className="bgFx" aria-hidden="true">
-      <div className="bgMesh" />
-      <div className="bgOrbs" />
-      <canvas ref={canvasRef} className="bgCanvas" />
-      <div className="bgVignette" />
-    </div>
-  )
-}
-
 // ── Types ─────────────────────────────────────────────────────────────────────
 type RegimeKey = 'RISK_OFF' | 'RISK_ON' | 'DXY_SURGE' | 'CRYPTO_DEC' | 'COMM_CYCLE' | 'UNCERTAIN'
 type AssetClass = 'crypto' | 'metals' | 'forex' | 'equities'
 
 interface PriceData {
-  price: number
-  conf: number
-  conf_pct: number
-  prev: number | null
-  change_1h: number
-  change_live: number
-  class: AssetClass
-  ts: number
+  price: number; conf: number; conf_pct: number
+  prev: number | null; change_1h: number; change_live: number
+  class: AssetClass; ts: number
 }
-
 interface RegimeResult {
-  regime: RegimeKey
-  confidence: number
-  narrative: string
-  signals: Record<string, number>
-  raw_changes: Record<string, number>
-  confidence_weights: Record<string, number>
-  ts: number
+  regime: RegimeKey; confidence: number; narrative: string
+  signals: Record<string, number>; raw_changes: Record<string, number>
+  confidence_weights: Record<string, number>; ts: number
 }
-
 interface HistoryPoint { price: number; ts: number }
-interface RegimeEvent  { ts: number; regime: RegimeKey; confidence: number; narrative: string }
+interface RegimeEvent { ts: number; regime: RegimeKey; confidence: number; narrative: string }
+interface Toast { id: number; message: string; color: string }
 
 // ── Feed config ───────────────────────────────────────────────────────────────
 const FEEDS = [
-  { sym: 'BTC',     name: 'Bitcoin',   class: 'crypto'   as AssetClass, fmt: '$',  dec: 0, color: '#f7931a' },
-  { sym: 'ETH',     name: 'Ethereum',  class: 'crypto'   as AssetClass, fmt: '$',  dec: 0, color: '#627eea' },
-  { sym: 'SOL',     name: 'Solana',    class: 'crypto'   as AssetClass, fmt: '$',  dec: 2, color: '#9945ff' },
-  { sym: 'AVAX',    name: 'Avalanche', class: 'crypto'   as AssetClass, fmt: '$',  dec: 2, color: '#e84142' },
-  { sym: 'PYTH',    name: 'Pyth',      class: 'crypto'   as AssetClass, fmt: '$',  dec: 4, color: '#e6dafe' },
-  { sym: 'XAU',     name: 'Gold',      class: 'metals'   as AssetClass, fmt: '$',  dec: 0, color: '#ffd700' },
-  { sym: 'XAG',     name: 'Silver',    class: 'metals'   as AssetClass, fmt: '$',  dec: 2, color: '#c0c0c0' },
-  { sym: 'WTI',     name: 'Oil',       class: 'metals'   as AssetClass, fmt: '$',  dec: 2, color: '#ff6d00' },
-  { sym: 'NGAS',    name: 'Nat Gas',   class: 'metals'   as AssetClass, fmt: '$',  dec: 3, color: '#4fc3f7' },
-  { sym: 'EUR/USD', name: 'Euro',      class: 'forex'    as AssetClass, fmt: '',   dec: 4, color: '#5c85d6' },
-  { sym: 'GBP/USD', name: 'Pound',     class: 'forex'    as AssetClass, fmt: '',   dec: 4, color: '#cf142b' },
-  { sym: 'USD/JPY', name: 'Yen',       class: 'forex'    as AssetClass, fmt: '',   dec: 2, color: '#bc002d' },
-  { sym: 'USD/CNH', name: 'Yuan',      class: 'forex'    as AssetClass, fmt: '',   dec: 4, color: '#de2910' },
-  { sym: 'SPY',     name: 'S&P 500',   class: 'equities' as AssetClass, fmt: '$',  dec: 0, color: '#26a69a' },
-  { sym: 'QQQ',     name: 'NASDAQ',    class: 'equities' as AssetClass, fmt: '$',  dec: 0, color: '#42a5f5' },
-  { sym: 'NVDA',    name: 'Nvidia',    class: 'equities' as AssetClass, fmt: '$',  dec: 0, color: '#76b900' },
-  { sym: 'TSLA',    name: 'Tesla',     class: 'equities' as AssetClass, fmt: '$',  dec: 0, color: '#cc0000' },
+  { sym:'BTC',     name:'Bitcoin',   class:'crypto'   as AssetClass, fmt:'$', dec:0, color:'#f7931a' },
+  { sym:'ETH',     name:'Ethereum',  class:'crypto'   as AssetClass, fmt:'$', dec:0, color:'#627eea' },
+  { sym:'SOL',     name:'Solana',    class:'crypto'   as AssetClass, fmt:'$', dec:2, color:'#9945ff' },
+  { sym:'AVAX',    name:'Avalanche', class:'crypto'   as AssetClass, fmt:'$', dec:2, color:'#e84142' },
+  { sym:'PYTH',    name:'Pyth',      class:'crypto'   as AssetClass, fmt:'$', dec:4, color:'#e6dafe' },
+  { sym:'XAU',     name:'Gold',      class:'metals'   as AssetClass, fmt:'$', dec:0, color:'#ffd700' },
+  { sym:'XAG',     name:'Silver',    class:'metals'   as AssetClass, fmt:'$', dec:2, color:'#c0c0c0' },
+  { sym:'WTI',     name:'Oil',       class:'metals'   as AssetClass, fmt:'$', dec:2, color:'#ff6d00' },
+  { sym:'NGAS',    name:'Nat Gas',   class:'metals'   as AssetClass, fmt:'$', dec:3, color:'#4fc3f7' },
+  { sym:'EUR/USD', name:'Euro',      class:'forex'    as AssetClass, fmt:'',  dec:4, color:'#5c85d6' },
+  { sym:'GBP/USD', name:'Pound',     class:'forex'    as AssetClass, fmt:'',  dec:4, color:'#cf142b' },
+  { sym:'USD/JPY', name:'Yen',       class:'forex'    as AssetClass, fmt:'',  dec:2, color:'#bc002d' },
+  { sym:'USD/CNH', name:'Yuan',      class:'forex'    as AssetClass, fmt:'',  dec:4, color:'#de2910' },
+  { sym:'SPY',     name:'S&P 500',   class:'equities' as AssetClass, fmt:'$', dec:0, color:'#26a69a' },
+  { sym:'QQQ',     name:'NASDAQ',    class:'equities' as AssetClass, fmt:'$', dec:0, color:'#42a5f5' },
+  { sym:'NVDA',    name:'Nvidia',    class:'equities' as AssetClass, fmt:'$', dec:0, color:'#76b900' },
+  { sym:'TSLA',    name:'Tesla',     class:'equities' as AssetClass, fmt:'$', dec:0, color:'#cc0000' },
 ]
 
-const REGIMES: Record<RegimeKey, { label: string; color: string; bg: string; icon: string }> = {
-  RISK_OFF:   { label: 'Risk-Off',          color: '#ff4444', bg: 'rgba(255,68,68,0.1)',    icon: '🔴' },
-  RISK_ON:    { label: 'Risk-On',           color: '#00e676', bg: 'rgba(0,230,118,0.1)',    icon: '🟢' },
-  DXY_SURGE:  { label: 'Dollar Surge',      color: '#ffb300', bg: 'rgba(255,179,0,0.1)',    icon: '🟡' },
-  CRYPTO_DEC: { label: 'Crypto Decoupling', color: '#00b0ff', bg: 'rgba(0,176,255,0.1)',    icon: '🔵' },
-  COMM_CYCLE: { label: 'Commodity Cycle',   color: '#ff6d00', bg: 'rgba(255,109,0,0.1)',    icon: '🟠' },
-  UNCERTAIN:  { label: 'Uncertain',         color: '#78909c', bg: 'rgba(120,144,156,0.1)',  icon: '⚪' },
+const CLASS_META: Record<AssetClass, { label: string; color: string; icon: string }> = {
+  crypto:   { label:'Crypto',         color:'#9945ff', icon:'₿' },
+  metals:   { label:'Metals & Energy',color:'#ffd700', icon:'⬡' },
+  forex:    { label:'Forex',          color:'#5c85d6', icon:'₤' },
+  equities: { label:'Equities',       color:'#26a69a', icon:'📈' },
 }
 
-const CLASS_META: Record<AssetClass, { label: string; color: string }> = {
-  crypto:   { label: 'Crypto',    color: '#9945ff' },
-  metals:   { label: 'Metals & Energy', color: '#ffd700' },
-  forex:    { label: 'Forex',     color: '#5c85d6' },
-  equities: { label: 'Equities',  color: '#26a69a' },
+const REGIMES: Record<RegimeKey, { label:string; color:string; bg:string; icon:string }> = {
+  RISK_OFF:   { label:'Risk-Off',          color:'#ff4444', bg:'rgba(255,68,68,0.12)',   icon:'🔴' },
+  RISK_ON:    { label:'Risk-On',           color:'#00e676', bg:'rgba(0,230,118,0.12)',   icon:'🟢' },
+  DXY_SURGE:  { label:'Dollar Surge',      color:'#ffb300', bg:'rgba(255,179,0,0.12)',   icon:'🟡' },
+  CRYPTO_DEC: { label:'Crypto Decoupling', color:'#00b0ff', bg:'rgba(0,176,255,0.12)',   icon:'🔵' },
+  COMM_CYCLE: { label:'Commodity Cycle',   color:'#ff6d00', bg:'rgba(255,109,0,0.12)',   icon:'🟠' },
+  UNCERTAIN:  { label:'Uncertain',         color:'#78909c', bg:'rgba(120,144,156,0.12)', icon:'⚪' },
 }
+
+const API = (import.meta as any).env?.VITE_API_URL || '/api'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const API = import.meta.env.VITE_API_URL || '/api'
-
 function fmtPrice(feed: typeof FEEDS[0], price: number | null | undefined): string {
   if (!price) return '—'
-  if (price > 10000)  return feed.fmt + price.toLocaleString('en', { maximumFractionDigits: 0 })
-  if (price > 100)    return feed.fmt + price.toFixed(2)
-  if (price > 1)      return feed.fmt + price.toFixed(feed.dec)
+  if (price > 10000) return feed.fmt + price.toLocaleString('en', { maximumFractionDigits: 0 })
+  if (price > 100)   return feed.fmt + price.toFixed(2)
+  if (price > 1)     return feed.fmt + price.toFixed(feed.dec)
   return feed.fmt + price.toFixed(5)
 }
 
-function buildSparkPath(pts: HistoryPoint[], w = 100, h = 32): string {
+function buildSparkPath(pts: HistoryPoint[], w = 100, h = 36): string {
   if (pts.length < 2) return ''
   const prices = pts.map(p => p.price)
   const min = Math.min(...prices), max = Math.max(...prices)
   const range = max - min || 1
-  const mapped = pts.map((p, i) => {
+  return 'M' + pts.map((p, i) => {
     const x = (i / (pts.length - 1)) * w
     const y = h - ((p.price - min) / range) * (h - 4) - 2
     return `${x.toFixed(1)},${y.toFixed(1)}`
-  })
-  return 'M' + mapped.join('L')
+  }).join('L')
 }
 
 function timeAgo(ts: number): string {
   const s = Math.floor(Date.now() / 1000 - ts)
-  if (s < 60)  return `${s}s ago`
-  if (s < 3600) return `${Math.floor(s/60)}m ago`
-  return `${Math.floor(s/3600)}h ago`
+  if (s < 60)   return `${s}s ago`
+  if (s < 3600) return `${Math.floor(s / 60)}m ago`
+  return `${Math.floor(s / 3600)}h ago`
 }
 
-// ── Demo data seed (when API is unreachable) ──────────────────────────────────
 function seedDemoData(): Record<string, PriceData> {
   const bases: Record<string, number> = {
-    BTC: 82450, ETH: 2180, SOL: 134, AVAX: 22.4, PYTH: 0.048,
-    XAU: 2940, XAG: 33.5, WTI: 68.2, NGAS: 3.82,
-    'EUR/USD': 1.0834, 'GBP/USD': 1.2945, 'USD/JPY': 148.2, 'USD/CNH': 7.245,
-    SPY: 562, QQQ: 475, NVDA: 875, TSLA: 248,
+    BTC:82450,ETH:2180,SOL:134,AVAX:22.4,PYTH:0.048,
+    XAU:2940,XAG:33.5,WTI:68.2,NGAS:3.82,
+    'EUR/USD':1.0834,'GBP/USD':1.2945,'USD/JPY':148.2,'USD/CNH':7.245,
+    SPY:562,QQQ:475,NVDA:875,TSLA:248,
   }
   const result: Record<string, PriceData> = {}
   for (const [sym, base] of Object.entries(bases)) {
     const noise = 1 + (Math.random() - 0.5) * 0.005
     const price = base * noise
     const chg = (Math.random() - 0.5) * 3
-    result[sym] = {
-      price, conf: price * 0.0002, conf_pct: 0.02,
-      prev: price * (1 - chg / 100),
-      change_1h: chg, change_live: chg * 0.3,
-      class: FEEDS.find(f => f.sym === sym)?.class || 'crypto',
-      ts: Date.now() / 1000,
-    }
+    result[sym] = { price, conf: price * 0.0002, conf_pct: 0.02, prev: price * (1 - chg / 100), change_1h: chg, change_live: chg * 0.3, class: FEEDS.find(f => f.sym === sym)?.class || 'crypto', ts: Date.now() / 1000 }
   }
   return result
 }
 
-function seedDemoRegime(): RegimeResult {
-  return {
-    regime: 'RISK_OFF',
-    confidence: 72,
-    narrative: 'Gold +1.1% as safe-haven bid intensifies. BTC -1.2% and SPY -0.6% confirm risk-off rotation across all major asset classes.',
-    signals: { crypto_avg: -1.1, equity_avg: -0.7, metal_avg: 0.9, dollar_str: 0.3 },
-    raw_changes: { BTC: -1.2, ETH: -0.8, SOL: 0.4, XAU: 1.1, XAG: 0.8, WTI: -0.5, 'EUR/USD': -0.15, 'USD/JPY': 0.3, SPY: -0.6, QQQ: -0.9, NVDA: -1.8 },
-    confidence_weights: { BTC: 0.98, XAU: 0.97, SPY: 0.95, 'EUR/USD': 0.96 },
-    ts: Date.now() / 1000,
-  }
+// ── Animated Background Canvas ────────────────────────────────────────────────
+function BackgroundCanvas() {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const canvas = canvasRef.current; if (!canvas) return
+    const ctx = canvas.getContext('2d')!
+    let animId: number
+    const dpr = Math.min(window.devicePixelRatio || 1, 2)
+    const resize = () => {
+      canvas.width  = window.innerWidth  * dpr
+      canvas.height = window.innerHeight * dpr
+      ctx.scale(dpr, dpr)
+    }
+    resize()
+    window.addEventListener('resize', resize)
+
+    const N = 55
+    const particles = Array.from({ length: N }, () => ({
+      x: Math.random() * window.innerWidth,
+      y: Math.random() * window.innerHeight,
+      vx: (Math.random() - 0.5) * 0.4,
+      vy: (Math.random() - 0.5) * 0.4,
+      r: Math.random() * 2 + 1,
+    }))
+
+    let t = 0
+    const draw = () => {
+      t += 0.004
+      ctx.clearRect(0, 0, window.innerWidth, window.innerHeight)
+
+      // Gradient mesh background
+      const grad = ctx.createRadialGradient(
+        window.innerWidth * (0.5 + 0.3 * Math.sin(t)),
+        window.innerHeight * (0.5 + 0.2 * Math.cos(t * 0.7)),
+        0,
+        window.innerWidth * 0.5, window.innerHeight * 0.5,
+        window.innerWidth * 0.8
+      )
+      grad.addColorStop(0, 'rgba(0,30,60,0.95)')
+      grad.addColorStop(0.5, 'rgba(2,10,25,0.98)')
+      grad.addColorStop(1, 'rgba(4,8,16,1)')
+      ctx.fillStyle = grad
+      ctx.fillRect(0, 0, window.innerWidth, window.innerHeight)
+
+      // Floating orbs
+      const orbs = [
+        { x: window.innerWidth * 0.2, y: window.innerHeight * 0.3, r: 200, c: 'rgba(0,150,255,0.04)' },
+        { x: window.innerWidth * 0.8, y: window.innerHeight * 0.6, r: 250, c: 'rgba(0,230,118,0.03)' },
+        { x: window.innerWidth * 0.5, y: window.innerHeight * 0.8, r: 180, c: 'rgba(153,69,255,0.04)' },
+      ]
+      orbs.forEach(o => {
+        const og = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, o.r)
+        og.addColorStop(0, o.c)
+        og.addColorStop(1, 'transparent')
+        ctx.fillStyle = og
+        ctx.beginPath()
+        ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2)
+        ctx.fill()
+      })
+
+      // Move + draw particles
+      particles.forEach(p => {
+        p.x += p.vx; p.y += p.vy
+        if (p.x < 0 || p.x > window.innerWidth)  p.vx *= -1
+        if (p.y < 0 || p.y > window.innerHeight) p.vy *= -1
+        ctx.beginPath()
+        ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2)
+        ctx.fillStyle = 'rgba(0,180,255,0.5)'
+        ctx.fill()
+      })
+
+      // Connection lines
+      for (let i = 0; i < N; i++) {
+        for (let j = i + 1; j < N; j++) {
+          const dx = particles[i].x - particles[j].x
+          const dy = particles[i].y - particles[j].y
+          const dist = Math.sqrt(dx * dx + dy * dy)
+          if (dist < 120) {
+            ctx.beginPath()
+            ctx.moveTo(particles[i].x, particles[i].y)
+            ctx.lineTo(particles[j].x, particles[j].y)
+            ctx.strokeStyle = `rgba(0,180,255,${0.15 * (1 - dist / 120)})`
+            ctx.lineWidth = 0.5
+            ctx.stroke()
+          }
+        }
+      }
+
+      animId = requestAnimationFrame(draw)
+    }
+    draw()
+    return () => { cancelAnimationFrame(animId); window.removeEventListener('resize', resize) }
+  }, [])
+  return <canvas ref={canvasRef} style={{ position:'fixed', top:0, left:0, width:'100%', height:'100%', zIndex:0, pointerEvents:'none' }} />
+}
+
+// ── Asset Card ────────────────────────────────────────────────────────────────
+function AssetCard({ feed, d, h }: { feed: typeof FEEDS[0]; d?: PriceData; h: HistoryPoint[] }) {
+  const [flash, setFlash] = useState<'up'|'dn'|null>(null)
+  const prevPrice = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (!d) return
+    if (prevPrice.current !== null && prevPrice.current !== d.price) {
+      setFlash(d.price > prevPrice.current ? 'up' : 'dn')
+      setTimeout(() => setFlash(null), 600)
+    }
+    prevPrice.current = d.price
+  }, [d?.price])
+
+  const chg = d?.change_1h ?? 0
+  const up = chg >= 0
+  const sparkPath = buildSparkPath(h, 100, 36)
+  const stale = d ? (Date.now() / 1000 - d.ts) > 30 : false
+  const confQ = !d ? 'LOW' : d.conf_pct < 0.05 ? 'HQ' : d.conf_pct < 0.2 ? 'MED' : 'LOW'
+  const confColor = confQ === 'HQ' ? '#00e676' : confQ === 'MED' ? '#ffb300' : '#ff4444'
+
+  return (
+    <div style={{
+      background: flash === 'up' ? 'rgba(0,230,118,0.08)' : flash === 'dn' ? 'rgba(255,68,68,0.08)' : 'rgba(6,13,24,0.7)',
+      backdropFilter: 'blur(12px)',
+      border: `1px solid ${stale ? '#ff444440' : feed.color + '30'}`,
+      borderLeft: `3px solid ${feed.color}`,
+      borderRadius: 8,
+      padding: '12px 14px',
+      cursor: 'pointer',
+      transition: 'all 0.3s ease',
+      position: 'relative',
+      overflow: 'hidden',
+    }}>
+      {stale && <div style={{ position:'absolute', top:4, right:4, fontSize:8, color:'#ff4444', background:'rgba(255,68,68,0.15)', padding:'1px 4px', borderRadius:2 }}>STALE</div>}
+
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:6 }}>
+        <div>
+          <div style={{ fontSize:13, fontWeight:700, color:feed.color, letterSpacing:'0.04em' }}>{feed.sym}</div>
+          <div style={{ fontSize:9, color:'#3d6080', marginTop:1 }}>{feed.name}</div>
+        </div>
+        <div style={{ fontSize:9, padding:'2px 6px', borderRadius:3, fontWeight:700, background: up ? 'rgba(0,230,118,0.12)' : 'rgba(255,68,68,0.12)', color: up ? '#00e676' : '#ff4444', border:`1px solid ${up ? 'rgba(0,230,118,0.3)' : 'rgba(255,68,68,0.3)'}` }}>
+          {up ? '+' : ''}{chg.toFixed(2)}%
+        </div>
+      </div>
+
+      <div style={{ fontSize:20, fontWeight:600, color:'#d0e8ff', letterSpacing:'0.02em', marginBottom:6, fontFamily:"'Bebas Neue','Impact',sans-serif" }}>
+        {fmtPrice(feed, d?.price)}
+      </div>
+
+      {/* Sparkline with gradient fill */}
+      <svg width="100%" height="36" viewBox="0 0 100 36" preserveAspectRatio="none" style={{ display:'block', marginBottom:6 }}>
+        {sparkPath && <>
+          <defs>
+            <linearGradient id={`sg-${feed.sym.replace('/','_')}`} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={feed.color} stopOpacity="0.4" />
+              <stop offset="100%" stopColor={feed.color} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          <path d={sparkPath + ' L100,36 L0,36 Z'} fill={`url(#sg-${feed.sym.replace('/','_')})`} />
+          <path d={sparkPath} fill="none" stroke={feed.color} strokeWidth="1.5" opacity="0.9" />
+        </>}
+      </svg>
+
+      {/* Confidence quality bar */}
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:4 }}>
+        <div style={{ flex:1, height:2, background:'#0e2540', borderRadius:1, marginRight:8 }}>
+          <div style={{ width: confQ === 'HQ' ? '90%' : confQ === 'MED' ? '55%' : '20%', height:'100%', background:confColor, borderRadius:1, transition:'width 0.5s ease' }} />
+        </div>
+        <span style={{ fontSize:8, color:confColor, fontWeight:700, letterSpacing:'0.08em' }}>{confQ}</span>
+      </div>
+
+      <div style={{ display:'flex', justifyContent:'space-between', fontSize:9, color:'#2a4a64' }}>
+        <span>±{d?.conf_pct?.toFixed(3) ?? '—'}%</span>
+        <span>{d ? timeAgo(d.ts) : '—'}</span>
+      </div>
+    </div>
+  )
 }
 
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
-  const [prices, setPrices]           = useState<Record<string, PriceData>>({})
-  const [regime, setRegime]           = useState<RegimeResult | null>(null)
-  const [history, setHistory]         = useState<Record<string, HistoryPoint[]>>({})
+  const [prices, setPrices]         = useState<Record<string, PriceData>>({})
+  const [regime, setRegime]         = useState<RegimeResult | null>(null)
+  const [history, setHistory]       = useState<Record<string, HistoryPoint[]>>({})
   const [regimeHistory, setRegimeHistory] = useState<RegimeEvent[]>([])
-  // const [activeClass, setActiveClass] = useState<AssetClass | 'all'>('all')
-  const [apiStatus, setApiStatus]     = useState<'connecting' | 'live' | 'demo'>('connecting')
-  const [clock, setClock]             = useState('')
-  const [publishStatus, setPublishStatus] = useState<'idle' | 'loading' | 'done'>('idle')
+  const [apiStatus, setApiStatus]   = useState<'connecting'|'live'|'demo'>('connecting')
+  const [clock, setClock]           = useState('')
+  const [publishStatus, setPublishStatus] = useState<'idle'|'loading'|'done'>('idle')
   const [publishText, setPublishText] = useState('')
-  const prevPrices = useRef<Record<string, number>>({})
+  const [toasts, setToasts]         = useState<Toast[]>([])
+  const [updateCount, setUpdateCount] = useState(0)
+  const [regimeStart, setRegimeStart] = useState<number>(Date.now() / 1000)
+  const prevRegime = useRef<RegimeKey | null>(null)
+  const toastId = useRef(0)
 
-  // Clock
+  const addToast = (message: string, color: string) => {
+    const id = toastId.current++
+    setToasts(t => [...t, { id, message, color }])
+    setTimeout(() => setToasts(t => t.filter(x => x.id !== id)), 4000)
+  }
+
   useEffect(() => {
-    const tick = () => setClock(new Date().toUTCString().split(' ')[4] + ' UTC')
-    tick()
-    const t = setInterval(tick, 1000)
+    const t = setInterval(() => setClock(new Date().toUTCString().split(' ')[4] + ' UTC'), 1000)
     return () => clearInterval(t)
   }, [])
 
-  // Fetch prices
   const fetchPrices = useCallback(async () => {
     try {
       const res = await fetch(`${API}/prices/latest`)
-
-      // Backend reachable but still warming up (prices not loaded yet)
-      if (res.status === 503) {
-        setApiStatus('connecting')
-        return
-      }
-
       if (!res.ok) throw new Error()
-
       const data = await res.json()
       setPrices(data.prices)
       setApiStatus('live')
-
-      // Build history from sparkline
+      setUpdateCount(c => c + 1)
       setHistory(prev => {
         const next = { ...prev }
         for (const [sym, d] of Object.entries(data.prices as Record<string, PriceData>)) {
@@ -308,27 +322,29 @@ export default function App() {
         return next
       })
     } catch {
-      // Only fall back to demo if the API is actually unreachable
-      if (apiStatus === 'connecting') {
-        setPrices(seedDemoData())
-        setApiStatus('demo')
-      }
+      if (apiStatus === 'connecting') { setPrices(seedDemoData()); setApiStatus('demo') }
     }
   }, [apiStatus])
 
-  // Fetch regime
   const fetchRegime = useCallback(async () => {
     try {
       const res = await fetch(`${API}/regime/current`)
       if (!res.ok) throw new Error()
       const data = await res.json()
+      if (prevRegime.current && prevRegime.current !== data.regime) {
+        const r = REGIMES[data.regime as RegimeKey]
+        addToast(`${r.icon} Regime shift: ${r.label}`, r.color)
+        setRegimeStart(Date.now() / 1000)
+      }
+      prevRegime.current = data.regime
       setRegime(data)
     } catch {
-      if (!regime) setRegime(seedDemoRegime())
+      if (!regime) {
+        setRegime({ regime:'RISK_OFF', confidence:72, narrative:'Gold +1.1% as safe-haven demand accelerates. BTC and equities both under pressure confirming risk-off rotation.', signals:{ crypto_avg:-1.1, equity_avg:-0.7, metal_avg:0.9, dollar_str:0.3, divergence:0.4 }, raw_changes:{ BTC:-1.2, ETH:-0.8, SOL:0.4, XAU:1.1, XAG:0.8, WTI:-0.5, 'EUR/USD':-0.15, 'USD/JPY':0.3, SPY:-0.6, QQQ:-0.9, NVDA:-1.8 }, confidence_weights:{ BTC:0.98, XAU:0.97, SPY:0.95, 'EUR/USD':0.96 }, ts: Date.now()/1000 })
+      }
     }
   }, [regime])
 
-  // Fetch regime history
   const fetchRegimeHistory = useCallback(async () => {
     try {
       const res = await fetch(`${API}/regime/history?limit=20`)
@@ -339,502 +355,276 @@ export default function App() {
   }, [])
 
   useEffect(() => {
-    fetchPrices()
-    fetchRegime()
-    fetchRegimeHistory()
-    const t1 = setInterval(fetchPrices,  8000)
-    const t2 = setInterval(fetchRegime,  10000)
+    fetchPrices(); fetchRegime(); fetchRegimeHistory()
+    const t1 = setInterval(fetchPrices, 8000)
+    const t2 = setInterval(fetchRegime, 10000)
     const t3 = setInterval(fetchRegimeHistory, 30000)
     return () => { clearInterval(t1); clearInterval(t2); clearInterval(t3) }
   }, [])
 
-  // Track price flashes
-  useEffect(() => {
-    const next: Record<string, number> = {}
-    for (const [sym, d] of Object.entries(prices)) next[sym] = d.price
-    prevPrices.current = next
-  }, [prices])
-
   const handlePublish = async (approved: boolean) => {
     setPublishStatus('loading')
     try {
-      const res = await fetch(`${API}/publish?approved=${approved}`, { method: 'POST' })
+      const res = await fetch(`${API}/publish?approved=${approved}`, { method:'POST' })
       const data = await res.json()
       setPublishText(data.text)
-      setPublishStatus('done')
     } catch {
       setPublishText(regime?.narrative || '')
-      setPublishStatus('done')
     }
+    setPublishStatus('done')
   }
 
-  // Category layout renders all classes; keep FEEDS intact.
+  const exportBrief = () => {
+    if (!regime) return
+    const r = REGIMES[regime.regime]
+    const lines = [
+      `# Macro Oracle Brief`,
+      `**Generated:** ${new Date().toUTCString()}`,
+      `**Powered by:** Pyth Network`,
+      ``,
+      `## Current Regime: ${r.icon} ${r.label}`,
+      `**Confidence:** ${regime.confidence}%`,
+      ``,
+      `## AI Narrative`,
+      regime.narrative,
+      ``,
+      `## Key Signals`,
+      ...Object.entries(regime.signals).map(([k, v]) => `- **${k}:** ${(v as number) >= 0 ? '+' : ''}${(v as number).toFixed(3)}`),
+      ``,
+      `## Price Changes`,
+      ...Object.entries(regime.raw_changes).map(([k, v]) => `- **${k}:** ${(v as number) >= 0 ? '+' : ''}${(v as number).toFixed(2)}%`),
+      ``,
+      `## Live Prices`,
+      ...FEEDS.map(f => { const d = prices[f.sym]; return d ? `- **${f.sym}:** ${fmtPrice(f, d.price)} (${d.change_1h >= 0 ? '+' : ''}${d.change_1h.toFixed(2)}%)` : '' }).filter(Boolean),
+    ]
+    const blob = new Blob([lines.join('\n')], { type:'text/markdown' })
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
+    a.download = `macro-brief-${Date.now()}.md`; a.click()
+  }
+
+  // Fear & Greed Index
+  const fearGreed = (() => {
+    if (!regime) return { score: 50, label: 'Neutral', color: '#ffb300' }
+    const s = regime.signals
+    const raw = ((s.crypto_avg || 0) + (s.equity_avg || 0) - (s.metal_avg || 0) * 0.5 - (s.dollar_str || 0) * 0.3)
+    const score = Math.round(Math.min(100, Math.max(0, 50 + raw * 8)))
+    const label = score >= 75 ? 'Extreme Greed' : score >= 55 ? 'Greed' : score >= 45 ? 'Neutral' : score >= 25 ? 'Fear' : 'Extreme Fear'
+    const color = score >= 75 ? '#00e676' : score >= 55 ? '#69f0ae' : score >= 45 ? '#ffb300' : score >= 25 ? '#ff7043' : '#ff1744'
+    return { score, label, color }
+  })()
+
   const r = regime ? REGIMES[regime.regime] : REGIMES.UNCERTAIN
+  const regimeDuration = Math.floor(Date.now() / 1000 - regimeStart)
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="app" style={{ background: 'transparent', minHeight: '100vh', color: '#d0e8ff', fontFamily: "'IBM Plex Mono', 'Courier New', monospace", fontSize: 13 }}>
-      <BackgroundFX />
+    <div style={{ background:'transparent', minHeight:'100vh', color:'#d0e8ff', fontFamily:"'IBM Plex Mono','Courier New',monospace", fontSize:13, position:'relative' }}>
 
-      {/* TOPBAR */}
-      <header className="topbar glass" style={{
-        position: 'sticky', top: 0, zIndex: 100,
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '12px 18px',
-        background: 'rgba(6, 13, 24, 0.68)',
-        borderBottom: '1px solid rgba(0, 212, 255, 0.10)',
-        boxShadow: '0 10px 60px rgba(0,0,0,0.40)',
-        backdropFilter: 'blur(12px)',
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-          <span className="brand-name" style={{ fontFamily: "'Bebas Neue','Impact',sans-serif", fontSize: 24, letterSpacing: '0.1em', color: '#00d4ff', textShadow: '0 0 20px rgba(0,212,255,0.4)' }}>
-            MACRO ORACLE
-          </span>
-          <span style={{ fontSize: 9, color: '#3d6080', letterSpacing: '0.2em', textTransform: 'uppercase' }}>
-            Cross-Asset Intelligence
-          </span>
-          <span className="pill" style={{ fontSize: 9, color: '#ffb300', border: '1px solid rgba(255,179,0,0.28)', padding: '4px 10px', borderRadius: 999, letterSpacing: '0.14em', background: 'rgba(255,179,0,0.06)' }}>
-            ⬡ PYTH NETWORK
-          </span>
+      <BackgroundCanvas />
+
+      {/* Toast notifications */}
+      <div style={{ position:'fixed', top:60, right:16, zIndex:1000, display:'flex', flexDirection:'column', gap:8 }}>
+        {toasts.map(t => (
+          <div key={t.id} style={{ padding:'10px 16px', background:`rgba(6,13,24,0.95)`, border:`1px solid ${t.color}50`, borderLeft:`3px solid ${t.color}`, borderRadius:6, fontSize:12, color:'#d0e8ff', backdropFilter:'blur(12px)', boxShadow:`0 4px 20px rgba(0,0,0,0.4)`, animation:'slideIn 0.3s ease' }}>
+            {t.message}
+          </div>
+        ))}
+      </div>
+
+      {/* HEADER */}
+      <header style={{ position:'sticky', top:0, zIndex:100, display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 20px', height:52, background:'rgba(4,8,16,0.85)', borderBottom:'1px solid rgba(0,180,255,0.15)', backdropFilter:'blur(16px)', flexWrap:'wrap', gap:8 }}>
+        <div style={{ display:'flex', alignItems:'baseline', gap:10 }}>
+          <span style={{ fontFamily:"'Bebas Neue','Impact',sans-serif", fontSize:22, letterSpacing:'0.1em', color:'#00d4ff', textShadow:'0 0 20px rgba(0,212,255,0.5)' }}>MACRO ORACLE</span>
+          <span style={{ fontSize:9, color:'#3d6080', letterSpacing:'0.18em', textTransform:'uppercase' }}>Cross-Asset Intelligence</span>
+          <span style={{ fontSize:9, color:'#ffb300', border:'1px solid rgba(255,179,0,0.3)', padding:'2px 7px', borderRadius:3, letterSpacing:'0.12em', background:'rgba(255,179,0,0.06)' }}>⬡ PYTH NETWORK</span>
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 9, color: apiStatus === 'live' ? '#00e676' : '#ffb300', border: `1px solid ${apiStatus === 'live' ? 'rgba(0,230,118,0.3)' : 'rgba(255,179,0,0.3)'}`, padding: '3px 10px', borderRadius: 2, letterSpacing: '0.15em' }}>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', background: apiStatus === 'live' ? '#00e676' : '#ffb300', boxShadow: `0 0 6px ${apiStatus === 'live' ? '#00e676' : '#ffb300'}`, animation: 'pulse 1.2s ease-in-out infinite' }} />
+        <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+          <span style={{ fontSize:9, color:'#3d6080' }}>⚡ {updateCount} updates</span>
+          <div style={{ display:'flex', alignItems:'center', gap:6, fontSize:9, color: apiStatus === 'live' ? '#00e676' : '#ffb300', border:`1px solid ${apiStatus === 'live' ? 'rgba(0,230,118,0.3)' : 'rgba(255,179,0,0.3)'}`, padding:'3px 10px', borderRadius:3, letterSpacing:'0.12em', background: apiStatus === 'live' ? 'rgba(0,230,118,0.06)' : 'rgba(255,179,0,0.06)' }}>
+            <div style={{ width:6, height:6, borderRadius:'50%', background: apiStatus === 'live' ? '#00e676' : '#ffb300', animation:'pulse 1.2s ease-in-out infinite' }} />
             {apiStatus === 'live' ? 'LIVE · PYTH HERMES' : apiStatus === 'demo' ? 'DEMO MODE' : 'CONNECTING...'}
           </div>
-          <span style={{ fontSize: 11, color: '#3d6080', letterSpacing: '0.05em' }}>{clock}</span>
+          <span style={{ fontSize:11, color:'#3d6080' }}>{clock}</span>
         </div>
       </header>
 
-      {/* HERO */}
-      <section className="heroWrap" style={{ padding: '26px 24px 10px' }}>
-        <div className="hero glass" style={{
-          position: 'relative',
-          padding: '26px 22px',
-          borderRadius: 14,
-          border: '1px solid rgba(0, 212, 255, 0.12)',
-          background: 'rgba(6, 13, 24, 0.60)',
-          boxShadow: '0 24px 120px rgba(0,0,0,0.55)',
-          overflow: 'hidden'
-        }}>
-          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'radial-gradient(800px 600px at 25% 10%, rgba(0,212,255,0.14), transparent 60%), radial-gradient(700px 500px at 80% 20%, rgba(120,90,255,0.10), transparent 60%)' }} />
+      <div style={{ position:'relative', zIndex:1, padding:'16px', maxWidth:1600, margin:'0 auto' }}>
 
-          <div style={{ position: 'relative' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 10, color: '#3d6080', letterSpacing: '0.22em', textTransform: 'uppercase' }}>Cross‑Asset Intelligence</div>
-                <h1 style={{ fontFamily: "'Bebas Neue','Impact',sans-serif", fontSize: 56, letterSpacing: '0.06em', lineHeight: 1, marginTop: 10, color: '#d0e8ff' }}>
-                  MACRO ORACLE
-                </h1>
-                <p style={{ marginTop: 10, maxWidth: 760, fontFamily: "'Rajdhani','Arial',sans-serif", fontSize: 18, lineHeight: 1.65, color: '#a9c9e4' }}>
-                  Live regime detection across crypto, metals, FX and equities — powered by real‑time Pyth Hermes feeds.
+        {/* HERO ROW — Regime + Fear/Greed + Meters */}
+        <div style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:16, marginBottom:16 }}>
+
+          {/* Regime card */}
+          {regime && (
+            <div style={{ background:'rgba(6,13,24,0.75)', backdropFilter:'blur(16px)', border:`1px solid ${r.color}30`, borderRadius:12, padding:'20px 24px', position:'relative', overflow:'hidden' }}>
+              <div style={{ position:'absolute', inset:0, background:`radial-gradient(ellipse 60% 100% at 10% 50%, ${r.bg} 0%, transparent 70%)`, pointerEvents:'none' }} />
+              <div style={{ position:'relative' }}>
+                <div style={{ fontSize:9, color:'#3d6080', letterSpacing:'0.2em', textTransform:'uppercase', marginBottom:8 }}>Current Macro Regime</div>
+                <div style={{ display:'flex', alignItems:'center', gap:16, marginBottom:12 }}>
+                  <div style={{ fontFamily:"'Bebas Neue','Impact',sans-serif", fontSize:36, color:r.color, letterSpacing:'0.06em', lineHeight:1, textShadow:`0 0 20px ${r.color}60` }}>
+                    {r.icon} {r.label.toUpperCase()}
+                  </div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                    <span style={{ fontSize:9, color:'#3d6080' }}>CONFIDENCE</span>
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                      <div style={{ width:100, height:4, background:'#0e2540', borderRadius:2 }}>
+                        <div style={{ width:`${regime.confidence}%`, height:'100%', background:r.color, borderRadius:2, transition:'width 0.8s ease', boxShadow:`0 0 6px ${r.color}` }} />
+                      </div>
+                      <span style={{ fontSize:11, color:r.color, fontWeight:700 }}>{regime.confidence}%</span>
+                    </div>
+                    <span style={{ fontSize:9, color:'#3d6080' }}>Active: {timeAgo(regimeStart)}</span>
+                  </div>
+                </div>
+
+                {/* Narrative */}
+                <p style={{ fontFamily:"'Rajdhani','Arial',sans-serif", fontSize:15, lineHeight:1.65, color:'#c0d8f0', marginBottom:12, maxWidth:600 }}>
+                  {regime.narrative}
                 </p>
-              </div>
 
-              <div className="heroPills" style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                <span className="pill" style={{ fontSize: 10, color: apiStatus === 'live' ? '#00e676' : '#ffb300', border: `1px solid ${apiStatus === 'live' ? 'rgba(0,230,118,0.28)' : 'rgba(255,179,0,0.25)'}`, padding: '6px 12px', borderRadius: 999, letterSpacing: '0.14em', background: 'rgba(4, 8, 16, 0.30)' }}>
-                  {apiStatus === 'live' ? 'LIVE · PYTH HERMES' : apiStatus === 'demo' ? 'DEMO MODE' : 'CONNECTING…'}
-                </span>
-                <span className="pill" style={{ fontSize: 10, color: '#00d4ff', border: '1px solid rgba(0,212,255,0.22)', padding: '6px 12px', borderRadius: 999, letterSpacing: '0.14em', background: 'rgba(4, 8, 16, 0.30)' }}>
-                  {Object.keys(prices).length} feeds
-                </span>
-                <span className="pill" style={{ fontSize: 10, color: '#3d6080', border: '1px solid rgba(61,96,128,0.25)', padding: '6px 12px', borderRadius: 999, letterSpacing: '0.14em', background: 'rgba(4, 8, 16, 0.25)' }}>
-                  {clock}
-                </span>
+                {/* Top signals */}
+                <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:12 }}>
+                  {Object.entries(regime.raw_changes || {}).slice(0, 6).map(([sym, chg]) => (
+                    <span key={sym} style={{ fontSize:10, padding:'3px 8px', borderRadius:4, background:(chg as number) >= 0 ? 'rgba(0,230,118,0.1)' : 'rgba(255,68,68,0.1)', color:(chg as number) >= 0 ? '#00e676' : '#ff4444', border:`1px solid ${(chg as number) >= 0 ? 'rgba(0,230,118,0.25)' : 'rgba(255,68,68,0.25)'}` }}>
+                      {sym} {(chg as number) >= 0 ? '+' : ''}{(chg as number).toFixed(2)}%
+                    </span>
+                  ))}
+                </div>
+
+                {/* Action buttons */}
+                <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+                  <button onClick={exportBrief} style={{ fontSize:10, padding:'6px 14px', background:'rgba(0,212,255,0.08)', border:'1px solid rgba(0,212,255,0.3)', color:'#00d4ff', cursor:'pointer', borderRadius:4, fontFamily:'inherit', letterSpacing:'0.06em' }}>
+                    📄 Export Brief
+                  </button>
+                  {publishStatus === 'idle' && <>
+                    <button onClick={() => handlePublish(false)} style={{ fontSize:10, padding:'6px 14px', background:'transparent', border:'1px solid #0e2540', color:'#3d6080', cursor:'pointer', borderRadius:4, fontFamily:'inherit' }}>Preview Tweet</button>
+                    <button onClick={() => handlePublish(true)} style={{ fontSize:10, padding:'6px 14px', background:'rgba(0,212,255,0.08)', border:'1px solid rgba(0,212,255,0.3)', color:'#00d4ff', cursor:'pointer', borderRadius:4, fontFamily:'inherit' }}>Publish to X →</button>
+                  </>}
+                  {publishStatus === 'loading' && <span style={{ fontSize:10, color:'#3d6080', padding:'6px 0' }}>Generating...</span>}
+                  {publishStatus === 'done' && (
+                    <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                      <div style={{ fontSize:10, padding:10, background:'rgba(4,8,16,0.8)', border:'1px solid #0e2540', borderRadius:4, color:'#a0c8e0', lineHeight:1.5, whiteSpace:'pre-wrap', maxWidth:400 }}>{publishText}</div>
+                      <div style={{ display:'flex', gap:6 }}>
+                        <button onClick={() => navigator.clipboard.writeText(publishText)} style={{ fontSize:10, padding:'4px 10px', background:'transparent', border:'1px solid #0e2540', color:'#3d6080', cursor:'pointer', borderRadius:3, fontFamily:'inherit' }}>Copy</button>
+                        <button onClick={() => setPublishStatus('idle')} style={{ fontSize:10, padding:'4px 10px', background:'transparent', border:'1px solid #0e2540', color:'#3d6080', cursor:'pointer', borderRadius:3, fontFamily:'inherit' }}>Reset</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Fear & Greed + Signal meters */}
+          <div style={{ display:'flex', flexDirection:'column', gap:12, minWidth:220 }}>
+
+            {/* Fear & Greed */}
+            <div style={{ background:'rgba(6,13,24,0.75)', backdropFilter:'blur(16px)', border:`1px solid ${fearGreed.color}30`, borderRadius:12, padding:'16px 20px', textAlign:'center' }}>
+              <div style={{ fontSize:9, color:'#3d6080', letterSpacing:'0.2em', textTransform:'uppercase', marginBottom:8 }}>Fear & Greed Index</div>
+              <div style={{ fontFamily:"'Bebas Neue','Impact',sans-serif", fontSize:52, color:fearGreed.color, lineHeight:1, textShadow:`0 0 20px ${fearGreed.color}60` }}>
+                {fearGreed.score}
+              </div>
+              <div style={{ fontSize:12, color:fearGreed.color, fontWeight:700, letterSpacing:'0.08em', marginTop:4 }}>{fearGreed.label}</div>
+              <div style={{ marginTop:8, height:4, background:'#0e2540', borderRadius:2 }}>
+                <div style={{ width:`${fearGreed.score}%`, height:'100%', background:`linear-gradient(90deg, #ff1744, #ffb300, #00e676)`, borderRadius:2 }} />
               </div>
             </div>
 
-            {/* METRICS */}
-            <div className="metricGrid" style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-              gap: 12,
-              marginTop: 18,
-            }}>
-              {(
-                [
-                  { k: 'Regime', v: regime ? REGIMES[regime.regime].label : '—', c: regime ? REGIMES[regime.regime].color : '#78909c' },
-                  { k: 'Confidence', v: regime ? `${regime.confidence}%` : '—', c: '#00d4ff' },
-                  { k: 'Refresh', v: '8–10s', c: '#ffb300' },
-                  { k: 'Mode', v: apiStatus === 'live' ? 'Live' : apiStatus === 'demo' ? 'Demo' : 'Connecting', c: apiStatus === 'live' ? '#00e676' : '#ffb300' },
-                ]
-              ).map(item => (
-                <div key={item.k} className="metricCard glass" style={{
-                  borderRadius: 12,
-                  padding: '14px 14px',
-                  background: 'rgba(6, 13, 24, 0.55)',
-                  border: '1px solid rgba(0,212,255,0.10)',
-                  boxShadow: '0 12px 40px rgba(0,0,0,0.35)'
-                }}>
-                  <div style={{ fontSize: 10, color: '#3d6080', letterSpacing: '0.2em', textTransform: 'uppercase' }}>{item.k}</div>
-                  <div style={{ marginTop: 8, fontFamily: "'Bebas Neue','Impact',sans-serif", fontSize: 28, letterSpacing: '0.06em', color: item.c, lineHeight: 1 }}>
-                    {item.v}
+            {/* Signal meters */}
+            <div style={{ background:'rgba(6,13,24,0.75)', backdropFilter:'blur(16px)', border:'1px solid rgba(0,180,255,0.12)', borderRadius:12, padding:'16px 20px' }}>
+              <div style={{ fontSize:9, color:'#3d6080', letterSpacing:'0.2em', textTransform:'uppercase', marginBottom:12 }}>Macro Pressures</div>
+              {[
+                { label:'Risk Appetite', val:(regime?.signals?.crypto_avg ?? 0) + (regime?.signals?.equity_avg ?? 0), color:'#00e676' },
+                { label:'Safe Haven',    val:regime?.signals?.metal_avg ?? 0,   color:'#ffd700' },
+                { label:'Dollar Str',    val:regime?.signals?.dollar_str ?? 0,  color:'#00b0ff' },
+                { label:'Divergence',    val:regime?.signals?.divergence ?? 0,  color:'#9945ff' },
+              ].map(m => {
+                const norm = Math.min(100, Math.max(0, (m.val + 3) / 6 * 100))
+                return (
+                  <div key={m.label} style={{ marginBottom:10 }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontSize:10, marginBottom:4 }}>
+                      <span style={{ color:'#3d6080' }}>{m.label}</span>
+                      <span style={{ color:m.color }}>{m.val >= 0 ? '+' : ''}{m.val.toFixed(2)}%</span>
+                    </div>
+                    <div style={{ height:3, background:'#0e2540', borderRadius:2 }}>
+                      <div style={{ width:`${norm}%`, height:'100%', background:m.color, borderRadius:2, transition:'width 0.8s ease', boxShadow:`0 0 4px ${m.color}` }} />
+                    </div>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </div>
-      </section>
 
-      {/* REGIME (glass panel) */}
-      {regime && (
-        <div className="regimeBanner regime-grid glass" style={{
-          display: 'grid', gridTemplateColumns: '320px 1fr 260px',
-          borderBottom: '1px solid rgba(14, 37, 64, 0.65)',
-          background: 'rgba(6, 13, 24, 0.70)',
-          position: 'relative', overflow: 'hidden',
-          backdropFilter: 'blur(10px)',
-          borderRadius: 14,
-          margin: '14px 24px 0',
-          border: '1px solid rgba(0, 212, 255, 0.10)'
-        }}>
-          {/* Glow */}
-          <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(ellipse 50% 100% at 15% 50%, ${r.bg} 0%, transparent 70%)`, pointerEvents: 'none' }} />
-
-          {/* Regime name */}
-          <div style={{ padding: '20px 28px', borderRight: '1px solid #0e2540', position: 'relative' }}>
-            <div style={{ fontSize: 9, color: '#3d6080', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 8 }}>
-              Current Macro Regime
-            </div>
-            <div style={{ fontFamily: "'Bebas Neue','Impact',sans-serif", fontSize: 32, letterSpacing: '0.06em', color: r.color, lineHeight: 1, marginBottom: 10 }}>
-              {r.icon} {r.label.toUpperCase()}
-            </div>
-            {/* Confidence bar */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <div style={{ flex: 1, height: 3, background: '#0e2540', borderRadius: 2 }}>
-                <div style={{ width: `${regime.confidence}%`, height: '100%', background: r.color, borderRadius: 2, transition: 'width 0.8s ease' }} />
-              </div>
-              <span style={{ fontSize: 11, color: '#3d6080' }}>{regime.confidence}%</span>
-            </div>
-            {/* Key drivers */}
-            <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {Object.entries(regime.raw_changes || {}).slice(0, 4).map(([sym, chg]) => (
-                <span key={sym} style={{ fontSize: 9, padding: '2px 6px', borderRadius: 2, background: (chg as number) >= 0 ? 'rgba(0,230,118,0.1)' : 'rgba(255,68,68,0.1)', color: (chg as number) >= 0 ? '#00e676' : '#ff4444', border: `1px solid ${(chg as number) >= 0 ? 'rgba(0,230,118,0.2)' : 'rgba(255,68,68,0.2)'}` }}>
-                  {sym} {(chg as number) >= 0 ? '+' : ''}{(chg as number).toFixed(2)}%
-                </span>
-              ))}
-            </div>
-          </div>
-
-          {/* Narrative */}
-          <div style={{ padding: '20px 28px', position: 'relative' }}>
-            <div style={{ fontSize: 9, color: '#3d6080', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 10 }}>
-              Live AI Macro Brief · Powered by Pyth Oracle Data
-            </div>
-            <p style={{ fontFamily: "'Rajdhani', 'Arial', sans-serif", fontSize: 16, lineHeight: 1.65, color: '#d0e8ff', fontWeight: 400, maxWidth: 640 }}>
-              {regime.narrative || 'Analyzing cross-asset flows...'}
-            </p>
-            <div style={{ marginTop: 14, display: 'flex', gap: 8 }}>
-              {publishStatus === 'idle' && (
-                <>
-                  <button onClick={() => handlePublish(false)} style={{ fontSize: 10, padding: '5px 12px', background: 'transparent', border: '1px solid #0e2540', color: '#3d6080', cursor: 'pointer', borderRadius: 2, letterSpacing: '0.08em', fontFamily: 'inherit' }}>
-                    Preview Tweet
-                  </button>
-                  <button onClick={() => handlePublish(true)} style={{ fontSize: 10, padding: '5px 12px', background: 'rgba(0,212,255,0.08)', border: '1px solid rgba(0,212,255,0.3)', color: '#00d4ff', cursor: 'pointer', borderRadius: 2, letterSpacing: '0.08em', fontFamily: 'inherit' }}>
-                    Publish to X →
-                  </button>
-                </>
-              )}
-              {publishStatus === 'loading' && <span style={{ fontSize: 10, color: '#3d6080' }}>Generating...</span>}
-              {publishStatus === 'done' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, width: '100%' }}>
-                  <div style={{ fontSize: 10, padding: 10, background: '#0a1520', border: '1px solid #0e2540', borderRadius: 3, color: '#a0c8e0', lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>
-                    {publishText}
-                  </div>
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={() => { navigator.clipboard.writeText(publishText) }} style={{ fontSize: 10, padding: '4px 10px', background: 'transparent', border: '1px solid #0e2540', color: '#3d6080', cursor: 'pointer', borderRadius: 2, fontFamily: 'inherit' }}>Copy</button>
-                    <button onClick={() => setPublishStatus('idle')} style={{ fontSize: 10, padding: '4px 10px', background: 'transparent', border: '1px solid #0e2540', color: '#3d6080', cursor: 'pointer', borderRadius: 2, fontFamily: 'inherit' }}>Reset</button>
-                  </div>
+        {/* 4 CATEGORY BOXES */}
+        {(['crypto','metals','forex','equities'] as AssetClass[]).map(cls => {
+          const meta = CLASS_META[cls]
+          const feeds = FEEDS.filter(f => f.class === cls)
+          return (
+            <div key={cls} style={{ background:'rgba(6,13,24,0.65)', backdropFilter:'blur(12px)', border:`1px solid ${meta.color}25`, borderRadius:12, marginBottom:16, overflow:'hidden' }}>
+              {/* Category header */}
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 18px', borderBottom:`1px solid ${meta.color}20`, background:`rgba(6,13,24,0.5)` }}>
+                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                  <div style={{ width:28, height:28, borderRadius:6, background:`${meta.color}18`, border:`1px solid ${meta.color}40`, display:'flex', alignItems:'center', justifyContent:'center', fontSize:14 }}>{meta.icon}</div>
+                  <span style={{ fontFamily:"'Bebas Neue','Impact',sans-serif", fontSize:18, color:meta.color, letterSpacing:'0.08em' }}>{meta.label}</span>
                 </div>
-              )}
+                <span style={{ fontSize:9, color:'#3d6080', border:'1px solid #0e2540', padding:'2px 8px', borderRadius:3 }}>{feeds.length} FEEDS</span>
+              </div>
+              {/* Asset grid */}
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:12, padding:14 }}>
+                {feeds.map(feed => (
+                  <AssetCard key={feed.sym} feed={feed} d={prices[feed.sym]} h={history[feed.sym] || []} />
+                ))}
+              </div>
             </div>
-          </div>
+          )
+        })}
 
-          {/* Signals */}
-          <div style={{ padding: '20px 24px', borderLeft: '1px solid #0e2540', position: 'relative', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 10 }}>
-            {[
-              { label: 'Crypto Avg',   val: regime.signals?.crypto_avg,  fmt: (v: number) => `${v >= 0 ? '+' : ''}${v?.toFixed(2)}%` },
-              { label: 'Equity Avg',   val: regime.signals?.equity_avg,  fmt: (v: number) => `${v >= 0 ? '+' : ''}${v?.toFixed(2)}%` },
-              { label: 'Metal Avg',    val: regime.signals?.metal_avg,   fmt: (v: number) => `${v >= 0 ? '+' : ''}${v?.toFixed(2)}%` },
-              { label: 'Dollar Str',   val: regime.signals?.dollar_str,  fmt: (v: number) => `${v >= 0 ? '+' : ''}${v?.toFixed(2)}%` },
-              { label: 'Divergence',   val: regime.signals?.divergence,  fmt: (v: number) => `${v?.toFixed(2)}` },
-            ].map(({ label, val, fmt }) => {
-              const v = val ?? 0
-              const pos = v >= 0
-              const cls = label === 'Divergence' ? '#00d4ff' : pos ? '#00e676' : '#ff4444'
+        {/* REGIME TIMELINE */}
+        <div style={{ background:'rgba(6,13,24,0.65)', backdropFilter:'blur(12px)', border:'1px solid rgba(0,180,255,0.12)', borderRadius:12, padding:'18px 20px', marginBottom:16 }}>
+          <div style={{ fontSize:9, color:'#3d6080', letterSpacing:'0.2em', textTransform:'uppercase', marginBottom:14 }}>Regime History Timeline</div>
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            {(regimeHistory.length > 0 ? regimeHistory : [
+              { ts:Date.now()/1000-180,  regime:'RISK_OFF'  as RegimeKey, confidence:72, narrative:'Gold +1.1% safe-haven bid. BTC and equities both under pressure.' },
+              { ts:Date.now()/1000-720,  regime:'UNCERTAIN' as RegimeKey, confidence:45, narrative:'Mixed signals. No clear macro theme dominant.' },
+              { ts:Date.now()/1000-1800, regime:'RISK_ON'   as RegimeKey, confidence:68, narrative:'Broad risk appetite. SPY and BTC both bid together.' },
+            ]).slice(0, 8).map((event, i) => {
+              const rr = REGIMES[event.regime as RegimeKey] || REGIMES.UNCERTAIN
               return (
-                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11 }}>
-                  <span style={{ color: '#3d6080' }}>{label}</span>
-                  <span style={{ padding: '2px 8px', borderRadius: 2, background: `${cls}18`, color: cls, border: `1px solid ${cls}30`, fontSize: 10, fontWeight: 600 }}>
-                    {fmt(v)}
-                  </span>
+                <div key={i} style={{ display:'grid', gridTemplateColumns:'130px 170px 1fr', gap:12, alignItems:'center', padding:'10px 14px', background:'rgba(4,8,16,0.6)', border:'1px solid #0a1826', borderRadius:6, borderLeft:`3px solid ${rr.color}` }}>
+                  <div>
+                    <div style={{ fontSize:10, color:'#3d6080' }}>{timeAgo(event.ts)}</div>
+                    <div style={{ fontSize:9, color:'#1e3a52', marginTop:2 }}>{new Date(event.ts * 1000).toLocaleTimeString()}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:11, fontWeight:700, color:rr.color }}>{rr.icon} {rr.label}</div>
+                    <div style={{ fontSize:9, color:'#3d6080', marginTop:2 }}>{event.confidence}% confidence</div>
+                  </div>
+                  <div style={{ fontSize:11, color:'#7090a8', lineHeight:1.4, fontFamily:"'Rajdhani','Arial',sans-serif" }}>{event.narrative}</div>
                 </div>
               )
             })}
           </div>
         </div>
-      )}
 
-      {/* ASSET CATEGORIES (separate boxes) */}
-      <div className="categoryGrid" style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
-        gap: 14,
-        padding: '18px 24px 10px',
-      }}>
-        {([
-          { key: 'crypto' as const, title: 'Crypto', color: CLASS_META.crypto.color },
-          { key: 'metals' as const, title: 'Metals & Energy', color: CLASS_META.metals.color },
-          { key: 'forex' as const, title: 'Forex', color: CLASS_META.forex.color },
-          { key: 'equities' as const, title: 'Equities', color: CLASS_META.equities.color },
-        ]).map(cat => {
-          const catFeeds = FEEDS.filter(f => f.class === cat.key)
-          return (
-            <section key={cat.key} className="categoryBox glass" style={{
-              border: `1px solid ${cat.color}33`,
-              background: 'rgba(6, 13, 24, 0.62)',
-              borderRadius: 14,
-              overflow: 'hidden',
-              boxShadow: '0 18px 70px rgba(0,0,0,0.45)',
-              backdropFilter: 'blur(12px)',
-            }}>
-              <div style={{
-                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                padding: '12px 14px',
-                borderBottom: '1px solid rgba(14, 37, 64, 0.65)',
-                background: 'rgba(4, 8, 16, 0.35)'
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <div style={{ width: 10, height: 10, borderRadius: 2, background: cat.color, boxShadow: `0 0 10px ${cat.color}55` }} />
-                  <span style={{ fontSize: 10, color: '#3d6080', letterSpacing: '0.2em', textTransform: 'uppercase' }}>{cat.title}</span>
-                </div>
-              </div>
-
-              <div className="categoryAssets" style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-                gap: 1,
-                background: '#0e2540',
-              }}>
-                {catFeeds.map(feed => {
-                  const d = prices[feed.sym]
-                  const h = history[feed.sym] || []
-                  const sparkPath = buildSparkPath(h, 100, 32)
-                  const chg = d?.change_1h ?? 0
-                  const up  = chg >= 0
-
-                  return (
-                    <div key={feed.sym} style={{
-                      background: 'rgba(6, 13, 24, 0.72)',
-                      padding: '12px 12px',
-                      transition: 'background 0.15s',
-                      borderBottom: `2px solid ${feed.color}22`,
-                      position: 'relative', overflow: 'hidden',
-                      minWidth: 0,
-                    }}>
-                      <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 2, background: feed.color, opacity: 0.6 }} />
-
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6, gap: 10 }}>
-                        <div style={{ minWidth: 0 }}>
-                          <div style={{ fontSize: 13, fontWeight: 700, color: feed.color, letterSpacing: '0.04em' }}>{feed.sym}</div>
-                          <div style={{ fontSize: 9, color: '#3d6080', marginTop: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{feed.name}</div>
-                        </div>
-                        <div style={{
-                          fontSize: 9, padding: '2px 6px', borderRadius: 2,
-                          background: up ? 'rgba(0,230,118,0.1)' : 'rgba(255,68,68,0.1)',
-                          color: up ? '#00e676' : '#ff4444',
-                          border: `1px solid ${up ? 'rgba(0,230,118,0.25)' : 'rgba(255,68,68,0.25)'}`,
-                          fontWeight: 700,
-                          flex: '0 0 auto'
-                        }}>
-                          {up ? '+' : ''}{chg.toFixed(2)}%
-                        </div>
-                      </div>
-
-                      <div style={{ fontSize: 18, fontWeight: 500, color: '#d0e8ff', letterSpacing: '0.05em', marginBottom: 6, fontFamily: "'Bebas Neue','Impact',sans-serif" }}>
-                        {fmtPrice(feed, d?.price)}
-                      </div>
-
-                      <svg width="100%" height="28" viewBox="0 0 100 32" preserveAspectRatio="none" style={{ display: 'block', marginBottom: 4 }}>
-                        {sparkPath && (
-                          <>
-                            <defs>
-                              <linearGradient id={`g-${feed.sym}`} x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor={feed.color} stopOpacity="0.3" />
-                                <stop offset="100%" stopColor={feed.color} stopOpacity="0" />
-                              </linearGradient>
-                            </defs>
-                            <path d={sparkPath + ' L100,32 L0,32 Z'} fill={`url(#g-${feed.sym})`} />
-                            <path d={sparkPath} fill="none" stroke={feed.color} strokeWidth="1.2" opacity="0.9" />
-                          </>
-                        )}
-                      </svg>
-
-                      {d?.conf_pct !== undefined && (
-                        <div style={{ fontSize: 9, color: '#2a4a64', display: 'flex', justifyContent: 'space-between' }}>
-                          <span>±{d.conf_pct.toFixed(3)}%</span>
-                          <span style={{ color: d.conf_pct < 0.05 ? '#00e676' : d.conf_pct < 0.2 ? '#ffb300' : '#ff4444' }}>
-                            {d.conf_pct < 0.05 ? 'HQ' : d.conf_pct < 0.2 ? 'MED' : 'LOW'}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            </section>
-          )
-        })}
+        {/* FOOTER */}
+        <footer style={{ padding:'12px 0', borderTop:'1px solid #0a1826', display:'flex', justifyContent:'space-between', alignItems:'center', fontSize:9, color:'#1e3a52', letterSpacing:'0.1em', flexWrap:'wrap', gap:8 }}>
+          <span>MACRO ORACLE · Pyth Network Hackathon 2026 · Apache 2.0</span>
+          <span style={{ color:'#ffb300', opacity:0.6 }}>⬡ PYTH HERMES · {FEEDS.length} ACTIVE FEEDS · 8s REFRESH</span>
+        </footer>
       </div>
-
-      {/* REGIME HISTORY TIMELINE */}
-      <div className="glass" style={{ padding: '22px 24px 26px', borderTop: '1px solid rgba(14, 37, 64, 0.55)', background: 'rgba(6, 13, 24, 0.60)', backdropFilter: 'blur(12px)' }}>
-        <div style={{ fontSize: 9, color: '#3d6080', letterSpacing: '0.2em', textTransform: 'uppercase', marginBottom: 14 }}>
-          Regime History Timeline
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {(regimeHistory.length > 0 ? regimeHistory : [
-            { ts: Date.now()/1000 - 180, regime: 'RISK_OFF' as RegimeKey,   confidence: 72, narrative: 'Gold +1.1% as safe-haven demand accelerates. BTC and equities both under pressure.' },
-            { ts: Date.now()/1000 - 720, regime: 'UNCERTAIN' as RegimeKey,  confidence: 45, narrative: 'Mixed signals. No clear macro theme dominant across asset classes.' },
-            { ts: Date.now()/1000 - 1800, regime: 'RISK_ON' as RegimeKey,   confidence: 68, narrative: 'Broad risk appetite. SPY and BTC both bid, gold flat.' },
-          ]).slice(0, 8).map((event, i) => {
-            const rr = REGIMES[event.regime as RegimeKey] || REGIMES.UNCERTAIN
-            return (
-              <div key={i} className="timelineRow" style={{ display: 'grid', gridTemplateColumns: '140px 160px 1fr', gap: 12, alignItems: 'center', padding: '10px 14px', background: '#040810', border: '1px solid #0a1826', borderRadius: 3, borderLeft: `3px solid ${rr.color}` }}>
-                <div>
-                  <div style={{ fontSize: 10, color: '#3d6080' }}>{timeAgo(event.ts)}</div>
-                  <div style={{ fontSize: 9, color: '#1e3a52', marginTop: 2 }}>
-                    {new Date(event.ts * 1000).toLocaleTimeString()}
-                  </div>
-                </div>
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: rr.color }}>{rr.icon} {rr.label}</div>
-                  <div style={{ fontSize: 9, color: '#3d6080', marginTop: 2 }}>{event.confidence}% confidence</div>
-                </div>
-                <div style={{ fontSize: 11, color: '#7090a8', lineHeight: 1.4, fontFamily: "'Rajdhani','Arial',sans-serif" }}>
-                  {event.narrative}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* FOOTER */}
-      <footer style={{
-        padding: '12px 24px', borderTop: '1px solid #0a1826',
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        background: '#040810', fontSize: 9, color: '#1e3a52', letterSpacing: '0.1em',
-      }}>
-        <span>MACRO ORACLE · Built for Pyth Network Hackathon 2026 · Apache 2.0</span>
-        <span style={{ color: '#ffb300', opacity: 0.6 }}>⬡ ORACLE DATA: PYTH HERMES · hermes.pyth.network · Feed IDs: {FEEDS.length} active</span>
-      </footer>
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Bebas+Neue&family=Rajdhani:wght@400;500;600&display=swap');
-        * { box-sizing: border-box; margin: 0; padding: 0; }
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { background: #040810; overflow-x: hidden; max-width: 100%; }
-        .app { overflow-x: hidden; max-width: 100%; }
-
-        /* Glassmorphism helpers */
-        .glass {
-          -webkit-backdrop-filter: blur(8px);
-          backdrop-filter: blur(8px);
-        }
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: #040810; }
         ::-webkit-scrollbar-thumb { background: #0e2540; border-radius: 3px; }
         @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.7)} }
-
-        /* Background FX layers */
-        .bgFx { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
-        .bgMesh {
-          position: absolute; inset: -20%;
-          background:
-            radial-gradient(600px 600px at 20% 25%, rgba(0, 212, 255, 0.18), transparent 60%),
-            radial-gradient(700px 700px at 80% 30%, rgba(0, 140, 255, 0.16), transparent 62%),
-            radial-gradient(800px 800px at 60% 80%, rgba(0, 230, 118, 0.10), transparent 60%),
-            linear-gradient(120deg, rgba(0, 40, 80, 0.65), rgba(0, 10, 25, 0.92));
-          filter: blur(0px) saturate(1.08);
-          animation: meshShift 18s ease-in-out infinite alternate;
-          will-change: transform;
-        }
-        @keyframes meshShift {
-          0% { transform: translate3d(-2%, -1%, 0) scale(1.02); }
-          100% { transform: translate3d(2%, 1%, 0) scale(1.06); }
-        }
-
-        .bgOrbs {
-          position: absolute; inset: 0;
-          background:
-            radial-gradient(220px 220px at 15% 65%, rgba(0, 212, 255, 0.12), transparent 60%),
-            radial-gradient(260px 260px at 85% 60%, rgba(0, 160, 255, 0.10), transparent 62%),
-            radial-gradient(320px 320px at 55% 15%, rgba(0, 140, 255, 0.08), transparent 65%);
-          filter: blur(2px);
-          animation: orbFloat 14s ease-in-out infinite;
-          will-change: transform, opacity;
-          opacity: 0.9;
-        }
-        @keyframes orbFloat {
-          0%, 100% { transform: translate3d(0,0,0); opacity: 0.75; }
-          50% { transform: translate3d(0, -10px, 0); opacity: 0.95; }
-        }
-
-        .bgCanvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; opacity: 0.95; }
-        .bgVignette {
-          position: absolute; inset: 0;
-          background: radial-gradient(ellipse at center, transparent 0%, rgba(4,8,16,0.55) 70%, rgba(4,8,16,0.9) 100%);
-        }
-
-        /* Ensure app content sits above background */
-        .app > *:not(.bgFx) { position: relative; z-index: 1; }
-
-        /* Reduce animation for low-motion users */
-        @media (prefers-reduced-motion: reduce) {
-          .bgMesh, .bgOrbs { animation: none !important; }
-          .bgCanvas { display: none !important; }
-        }
-
-        /* Mobile responsiveness */
-        /* Premium layout tweaks */
-        .topbar .pill { background: rgba(4,8,16,0.25); }
-
-        @media (max-width: 1024px) {
-          .metricGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-        }
-
+        @keyframes slideIn { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
         @media (max-width: 768px) {
-          .regime-grid { grid-template-columns: 1fr !important; }
-          .metricGrid { grid-template-columns: 1fr !important; }
-
-          /* Make the topbar wrap instead of overflowing */
-          header { padding: 12px 12px !important; height: auto !important; flex-wrap: wrap !important; gap: 10px !important; }
-          header > div { flex-wrap: wrap !important; }
-
-          .heroWrap { padding: 18px 12px 6px !important; }
-          .brand-name { font-size: 18px !important; }
-        }
-
-        @media (max-width: 640px) {
-          .regimeBanner { grid-template-columns: 1fr !important; }
-          .assetGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-          .categoryGrid { grid-template-columns: 1fr !important; padding: 12px !important; }
-          .categoryAssets { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
-          .timelineRow { grid-template-columns: 1fr !important; gap: 8px !important; align-items: start !important; }
-          .timelineRow > div { min-width: 0 !important; }
-          .app { font-size: 12px !important; }
-
-          /* Reduce padding in key areas (topbar/banner) */
-          header { padding: 0 12px !important; }
-
-          /* Prevent any accidental overflows from wide text */
-          .regimeBanner, .assetGrid { max-width: 100vw; }
-        }
-
-        @media (max-width: 420px) {
-          .assetGrid { grid-template-columns: 1fr !important; }
+          header { height: auto !important; padding: 8px 12px !important; }
+          div[style*="gridTemplateColumns: '1fr auto'"] { grid-template-columns: 1fr !important; }
+          div[style*="gridTemplateColumns: '130px"] { grid-template-columns: 1fr !important; }
         }
       `}</style>
     </div>
