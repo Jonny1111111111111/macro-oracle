@@ -17,24 +17,25 @@ from regime import detect_regime
 from narrator import generate_narrative
 
 # ── Feed definitions (mirrored from shared/feeds.ts) ──────────────────────────
+# NOTE: Hermes returns 404 if ANY requested price id is unknown.
+# These ids were validated against the Hermes `/v2/price_feeds` registry on 2026-03-10.
+# (We temporarily omit WTI + NGAS until we confirm their Hermes ids to avoid breaking the whole batch.)
 FEEDS = [
     {"sym": "BTC",     "id": "0xe62df6c8b4a85fe1a67db44dc12de5db330f7ac66b72dc658afedf0f4a415b43", "class": "crypto"},
     {"sym": "ETH",     "id": "0xff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace", "class": "crypto"},
     {"sym": "SOL",     "id": "0xef0d8b6fda2ceba41da15d4095d1da392a0d2f8ed0c6c7bc0f4cfac8c280b56d", "class": "crypto"},
-    {"sym": "AVAX",    "id": "0x93da3352f9f1d105fdfe4971cfa80e9269ef110b2d2b9eb51a4b12f27380b8e1", "class": "crypto"},
+    {"sym": "AVAX",    "id": "0x93da3352f9f1d105fdfe4971cfa80e9dd777bfc5d0f683ebb6e1294b92137bb7", "class": "crypto"},
     {"sym": "PYTH",    "id": "0x0bbf28e9a841a1cc788f6a361b17ca072d0ea3098a1e5df1c3922d06719579ff", "class": "crypto"},
     {"sym": "XAU",     "id": "0x765d2ba906dbc32ca17cc11f5310a89e9ee1f6420508c63861f2f8ba4ee34bb2", "class": "metals"},
     {"sym": "XAG",     "id": "0xf2fb02c32b055c805e7238d628e5e9dadef274376114eb1f012337cabe93871e", "class": "metals"},
-    {"sym": "WTI",     "id": "0x0e1472f3a8ee12e3c97e5ffd72dd0d37aa12b2c04c2e1d54a9c56e749b6b59e4", "class": "metals"},
-    {"sym": "NGAS",    "id": "0xa0cf45057a91c5b3034efc3b5f7c83bada35e793d57ea50f1e1d65a4c8499fd0", "class": "metals"},
     {"sym": "EUR/USD", "id": "0xa995d00bb36a63cef7fd2c287dc105fc8f3d93779f062f09551b0af3e81ec30b", "class": "forex"},
     {"sym": "GBP/USD", "id": "0x84c2dde9633d93d1bcad84e7dc41c9d56578b7ec52fabedc1f335d673df0a7c1", "class": "forex"},
     {"sym": "USD/JPY", "id": "0xef2c98c804ba503c6a707e38be4dfbb16683775f195b091252bf24693042fd52", "class": "forex"},
-    {"sym": "USD/CNH", "id": "0xeef52e09c878ad41f6a81803e3ba6e6fc37b04ed9cc5d7c02f7e24e41be0d421", "class": "forex"},
-    {"sym": "SPY",     "id": "0x2a01deaec9e51a579277b34b122399984d0bbf57e2458a7e42fecd2829867a0d", "class": "equities"},
-    {"sym": "QQQ",     "id": "0x3b9551a68d01d954d6387aff4df1529027ffb2fee413082e509feb29cc4904fe", "class": "equities"},
-    {"sym": "NVDA",    "id": "0x16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc0632f1", "class": "equities"},
-    {"sym": "TSLA",    "id": "0x2a9ac4e2e0ce6c29bce6d27f37c05e94e64c4e45b5f43562e52e3cbdc0e7e8e5", "class": "equities"},
+    {"sym": "USD/CNH", "id": "0xeef52e09c878ad41f6a81803e3640fe04dceea727de894edd4ea117e2e332e66", "class": "forex"},
+    {"sym": "SPY",     "id": "0x19e09bb805456ada3979a7d1cbb4b6d63babc3a0f8e8a9509f68afa5c4c11cd5", "class": "equities"},
+    {"sym": "QQQ",     "id": "0x9695e2b96ea7b3859da9ed25b7a46a920a776e2fdae19a7bcfdf2b219230452d", "class": "equities"},
+    {"sym": "NVDA",    "id": "0xb1073854ed24cbc755dc527418f52b7d271f6cc967bbf8d8129112b18860a593", "class": "equities"},
+    {"sym": "TSLA",    "id": "0x16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc0632f1", "class": "equities"},
 ]
 
 HERMES_URL = "https://hermes.pyth.network"
@@ -75,7 +76,8 @@ async def fetch_pyth():
     async with aiohttp.ClientSession() as session:
         async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
             if resp.status != 200:
-                raise Exception(f"Hermes returned {resp.status}")
+                body = await resp.text()
+                raise Exception(f"Hermes returned {resp.status}: {body[:300]}")
             data = await resp.json()
 
     feed_map = {norm(f["id"]): f for f in FEEDS}
