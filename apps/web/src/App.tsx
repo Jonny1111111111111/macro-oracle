@@ -614,17 +614,79 @@ export default function App() {
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Bebas+Neue&family=Rajdhani:wght@400;500;600&display=swap');
+
+        :root{
+          --bg:#040810;
+          --panel: rgba(6,13,24,0.55);
+          --panel-strong: rgba(6,13,24,0.68);
+          --border: rgba(0,212,255,0.10);
+          --border-2: rgba(140,140,255,0.10);
+          --text:#d0e8ff;
+          --muted:#3d6080;
+          --glow: rgba(0,212,255,0.14);
+        }
+
         *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-        html, body { background: #040810; overflow-x: hidden; max-width: 100%; }
+        html, body { background: var(--bg); overflow-x: hidden; max-width: 100%; }
+
+        /* Glass */
+        .glass{ -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px); }
+
+        /* Background FX layers */
+        .bgFx { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+        .bgMesh {
+          position:absolute; inset:-20%;
+          background:
+            radial-gradient(800px 700px at 22% 18%, rgba(0,212,255,0.22), transparent 60%),
+            radial-gradient(900px 800px at 82% 22%, rgba(120,90,255,0.16), transparent 62%),
+            radial-gradient(900px 900px at 55% 82%, rgba(0,230,118,0.10), transparent 62%),
+            linear-gradient(120deg, rgba(0,40,80,0.60), rgba(0,10,25,0.92));
+          animation: meshShift 18s ease-in-out infinite alternate;
+          will-change: transform;
+        }
+        @keyframes meshShift { 0%{ transform: translate3d(-2%,-1%,0) scale(1.02);} 100%{ transform: translate3d(2%,1%,0) scale(1.07);} }
+
+        .bgOrbs{
+          position:absolute; inset:0;
+          background:
+            radial-gradient(260px 260px at 14% 62%, rgba(0,212,255,0.20), transparent 60%),
+            radial-gradient(340px 340px at 84% 58%, rgba(0,160,255,0.16), transparent 62%),
+            radial-gradient(420px 420px at 55% 14%, rgba(0,140,255,0.12), transparent 65%);
+          filter: blur(3px);
+          animation: orbFloat 14s ease-in-out infinite;
+          opacity: 1;
+          will-change: transform, opacity;
+        }
+        @keyframes orbFloat { 0%,100%{ transform: translate3d(0,0,0); opacity:0.78;} 50%{ transform: translate3d(0,-12px,0); opacity:1;} }
+
+        .bgCanvas{ position: fixed; top:0; left:0; width:100%; height:100%; opacity: 0.95; }
+        .bgVignette{ position:absolute; inset:0; background: radial-gradient(ellipse at center, transparent 0%, rgba(4,8,16,0.50) 70%, rgba(4,8,16,0.92) 100%); }
+
+        /* Ensure content above background */
+        .app > *:not(.bgFx){ position: relative; z-index: 1; }
+
+        /* Scrollbar */
         ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: #040810; }
+        ::-webkit-scrollbar-track { background: var(--bg); }
         ::-webkit-scrollbar-thumb { background: #0e2540; border-radius: 3px; }
+
         @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.3;transform:scale(0.7)} }
-        @keyframes slideIn { from{opacity:0;transform:translateX(20px)} to{opacity:1;transform:translateX(0)} }
+        @keyframes slideIn { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:translateY(0)} }
+
+        /* Mobile */
+        @media (max-width: 900px){
+          h1{ font-size: 42px !important; }
+        }
         @media (max-width: 768px) {
-          header { height: auto !important; padding: 8px 12px !important; }
-          div[style*="gridTemplateColumns: '1fr auto'"] { grid-template-columns: 1fr !important; }
-          div[style*="gridTemplateColumns: '130px"] { grid-template-columns: 1fr !important; }
+          header { height: auto !important; padding: 10px 12px !important; }
+          .heroWrap{ padding: 18px 12px 6px !important; }
+          .heroPills{ width: 100%; }
+          .metricGrid{ grid-template-columns: 1fr !important; }
+          .categoryBox{ border-radius: 12px !important; }
+        }
+        @media (prefers-reduced-motion: reduce){
+          .bgMesh, .bgOrbs{ animation:none !important; }
+          .bgCanvas{ display:none !important; }
         }
       `}</style>
     </div>
