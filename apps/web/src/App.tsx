@@ -451,7 +451,7 @@ export default function App() {
       <div style={{ position:'relative', zIndex:1, padding:'16px', maxWidth:1600, margin:'0 auto' }}>
 
         {/* HERO ROW — Regime + Fear/Greed + Meters */}
-        <div style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:16, marginBottom:16 }}>
+        <div className="heroRow" style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:16, marginBottom:16 }}>
 
           {/* Regime card */}
           {regime && (
@@ -514,7 +514,7 @@ export default function App() {
           )}
 
           {/* Fear & Greed + Signal meters */}
-          <div style={{ display:'flex', flexDirection:'column', gap:12, minWidth:220 }}>
+          <div className="heroSide" style={{ display:'flex', flexDirection:'column', gap:12, minWidth:220 }}>
 
             {/* Fear & Greed */}
             <div style={{ background:'rgba(6,13,24,0.75)', backdropFilter:'blur(16px)', border:`1px solid ${fearGreed.color}30`, borderRadius:12, padding:'16px 20px', textAlign:'center' }}>
@@ -679,10 +679,18 @@ export default function App() {
         }
         @media (max-width: 768px) {
           header { height: auto !important; padding: 10px 12px !important; }
+
+          /* Fix overflow: stack hero columns */
+          .heroRow { grid-template-columns: 1fr !important; }
+          .heroSide { min-width: 0 !important; width: 100% !important; }
+
           .heroWrap{ padding: 18px 12px 6px !important; }
           .heroPills{ width: 100%; }
           .metricGrid{ grid-template-columns: 1fr !important; }
           .categoryBox{ border-radius: 12px !important; }
+
+          /* Asset grids: 2 columns max on mobile */
+          .categoryBox div[style*="minmax(160px"] { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
         }
         @media (prefers-reduced-motion: reduce){
           .bgMesh, .bgOrbs{ animation:none !important; }
