@@ -681,8 +681,8 @@ export default function App() {
           header { height: auto !important; padding: 10px 12px !important; }
 
           /* Fix overflow: stack hero columns */
-          .heroRow { grid-template-columns: 1fr !important; }
-          .heroSide { min-width: 0 !important; width: 100% !important; }
+          .heroRow { display: flex !important; flex-direction: column !important; }
+          .heroSide { min-width: 0 !important; width: 100% !important; align-self: stretch !important; }
 
           .heroWrap{ padding: 18px 12px 6px !important; }
           .heroPills{ width: 100%; }
